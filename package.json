@@ -1,0 +1,13 @@
+{
+  "name": "plan-calendar",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "A Preview Calendar and a Calendar Agent that plan from one sentence in Ask, and sync to Google Calendar only after confirmation.",
+  "scripts": {
+    "start": "node server.mjs",
+    "demo": "node server.mjs",
+    "record-replies": "node src/record-replies.mjs",
+    "test": "node --test"
+  }
+}

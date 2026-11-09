@@ -1,0 +1,75 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Plan Calendar demo</title>
+<style>
+  :root { --hour: 44px; --grey: #d9dce1; --green: #2e9e5b; }
+  * { box-sizing: border-box; }
+  body { margin: 0; font: 14px/1.4 system-ui, sans-serif; color: #1c2330; display: flex; flex-direction: column; height: 100vh; }
+  header { padding: 8px 14px; background: #fff7e0; border-bottom: 1px solid #e6d9a8; display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
+  #banner { flex: 1; min-width: 260px; }
+  #model-badge { font-size: 12px; padding: 2px 8px; border-radius: 10px; background: #e7eefc; border: 1px solid #b7c8ee; }
+  .weeknav { display: flex; gap: 6px; align-items: center; padding: 6px 14px; }
+  button { font: inherit; padding: 5px 11px; border: 1px solid #9aa4b5; background: #fff; border-radius: 6px; cursor: pointer; }
+  button.primary { background: var(--green); color: #fff; border-color: var(--green); }
+  button:disabled { opacity: .45; cursor: default; }
+  #scroll { flex: 1; overflow: auto; padding: 0 14px; }
+  #calendar { display: grid; grid-template-columns: 52px 1fr; min-width: 760px; }
+  .heads { grid-column: 2; display: grid; grid-template-columns: repeat(7, 1fr); position: sticky; top: 0; background: #fff; z-index: 5; border-bottom: 1px solid #ccc; }
+  .heads div { text-align: center; padding: 4px 0; font-weight: 600; border-left: 1px solid #eee; }
+  #axis { position: relative; }
+  #axis span { position: absolute; right: 6px; font-size: 11px; color: #667; transform: translateY(-50%); }
+  #grid { position: relative; background: repeating-linear-gradient(to bottom, #fff 0, #fff calc(var(--hour) - 1px), #eceef2 calc(var(--hour) - 1px), #eceef2 var(--hour)); }
+  .daycol { position: absolute; top: 0; bottom: 0; border-left: 1px solid #e4e6eb; }
+  .blk { position: absolute; padding: 2px 5px; border-radius: 5px; overflow: hidden; font-size: 12px; user-select: none; touch-action: none; }
+  .blk .tag { display: inline-block; font-size: 10px; font-weight: 700; margin-right: 4px; padding: 0 4px; border-radius: 3px; background: rgba(0,0,0,.12); }
+  .blk.event { background: var(--grey); color: #444; border: 1px solid #b4b9c2; cursor: not-allowed; }
+  .blk.proposed { background: #d6f2e1; border: 2px dashed var(--green); cursor: grab; }
+  .blk.moved { border: 4px solid #167a41; }
+  .blk.candidate { background: #fff; border: 2px dashed #7a8; cursor: pointer; font-weight: 600; }
+  .blk.drag { opacity: .75; z-index: 20; cursor: grabbing; }
+  #ask { border-top: 2px solid #9aa4b5; padding: 8px 14px 12px; background: #f7f8fa; }
+  #prompt { min-height: 22px; margin-bottom: 6px; display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+  #notes { color: #555; margin-bottom: 4px; }
+  #chips { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 6px; }
+  .chip { border-radius: 14px; background: #eef2fa; font-size: 12px; }
+  form { display: flex; gap: 6px; }
+  #ask-input { flex: 1; padding: 7px 10px; border: 1px solid #9aa4b5; border-radius: 6px; font: inherit; }
+  #detail { background: #fff; border: 1px solid #ccd; border-radius: 6px; padding: 6px 10px; margin-bottom: 6px; }
+</style>
+</head>
+<body>
+<header>
+  <div id="banner"><strong>Nothing is written to Google Calendar.</strong> This is an offline preview with a fake calendar; nothing is bought or booked. All times are UTC.</div>
+  <span id="model-badge">Model: …</span>
+</header>
+<div class="weeknav">
+  <button id="prev" type="button">&larr; Previous week</button>
+  <strong id="week-label"></strong>
+  <button id="next" type="button">Next week &rarr;</button>
+  <span id="other-weeks" style="color:#a35"></span>
+  <span style="flex:1"></span>
+  <button id="undo" type="button" disabled>Undo</button>
+  <button id="reset" type="button">Reset demo</button>
+</div>
+<div id="scroll"><div id="calendar" aria-label="Preview Calendar"></div></div>
+<section id="ask" aria-label="Ask">
+  <div id="detail" hidden></div>
+  <div id="prompt" aria-live="polite"></div>
+  <div id="notes"></div>
+  <div id="chips">
+    <button class="chip" type="button" data-fill="Ugh, I have been sitting all day. Can you find me 45 minutes for a walk after 8 tonight?">Ugh, I have been sitting all day. Can you find me 45 minutes for a walk after 8 tonight?</button>
+    <button class="chip" type="button" data-fill="My landlord needs the signed lease back by the 20th and I have not even opened it. Can you help me get it done?">My landlord needs the signed lease back by the 20th and I have not even opened it. Can you help me get it done?</button>
+    <button class="chip" type="button" data-fill="I am bored this weekend. Any ideas for something fun? I like live music and good food.">I am bored this weekend. Any ideas for something fun? I like live music and good food.</button>
+    <button class="chip" type="button" data-scene="shopping">I can’t shop that early — push my grocery run to the afternoon</button>
+  </div>
+  <form id="ask-form">
+    <input id="ask-input" type="text" placeholder="Ask: for example, find time to work out for half an hour" autocomplete="off">
+    <button class="primary" type="submit">Ask</button>
+  </form>
+</section>
+<script src="/demo.js" type="module"></script>
+</body>
+</html>

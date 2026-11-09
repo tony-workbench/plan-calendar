@@ -1,0 +1,62 @@
+{
+  "ugh, i have been sitting all day. can you find me 45 minutes for a walk after 8 tonight": {
+    "kind": "basic",
+    "title": "walk",
+    "minutes": 45,
+    "when": "tonight",
+    "afterHour": 20,
+    "what": "",
+    "deadlineText": "",
+    "target": ""
+  },
+  "my landlord needs the signed lease back by the 20th and i have not even opened it. can you help me get it done": {
+    "kind": "deadline",
+    "title": "",
+    "minutes": 0,
+    "when": "",
+    "afterHour": 0,
+    "what": "signed lease",
+    "deadlineText": "the 20th",
+    "target": ""
+  },
+  "i am bored this weekend. any ideas for something fun? i like live music and good food": {
+    "kind": "discover",
+    "title": "",
+    "minutes": 0,
+    "when": "",
+    "afterHour": 0,
+    "what": "",
+    "deadlineText": "",
+    "target": ""
+  },
+  "production needs an hour more": {
+    "kind": "more-time",
+    "title": "",
+    "minutes": 60,
+    "when": "",
+    "afterHour": 0,
+    "what": "",
+    "deadlineText": "",
+    "target": "production"
+  },
+  "it is due thursday at 3 pm": {
+    "kind": "set-deadline",
+    "title": "",
+    "minutes": 0,
+    "when": "",
+    "afterHour": 0,
+    "what": "",
+    "deadlineText": "Thursday at 3 pm",
+    "target": ""
+  },
+  "what is the capital of france": {
+    "kind": "none",
+    "title": "",
+    "minutes": 0,
+    "when": "",
+    "afterHour": 0,
+    "what": "",
+    "deadlineText": "",
+    "target": ""
+  }
+}
