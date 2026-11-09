@@ -118,19 +118,13 @@ export function understand({ request = '', now, context = {} }) {
     return dl ? { kind: 'deadline', what, deadline: dl.ms, assumed: dl.assumed } : { kind: 'ask-deadline', what };
   }
   if (!INTENT.test(request)) return { kind: 'none' };
-  const t = request.toLowerCase();
-  return { kind: 'basic', title: activity(request), minutes: parseMinutes(request) ?? 30, pref: parseWhen(request, nowMs), past: /\byesterday\b/.test(t) };
-}
-
-export const titleCase = cap;
-
-export function parseWhen(text, nowMs) {
-  const t = text.toLowerCase(), today = dayStart(nowMs);
+  const t = request.toLowerCase(), today = dayStart(nowMs);
   const after = t.match(/\bafter\s+(\d{1,2})\s*(am|pm)\b/);
-  if (after) return { from: today, window: [((+after[1] % 12) + (after[2] === 'pm' ? 12 : 0)) * 60, AWAKE_END], limit: today + D };
-  if (/\b(tonight|this evening)\b/.test(t)) return { from: today, window: [1020, AWAKE_END], limit: today + D };
-  if (/\btomorrow\b/.test(t)) return { from: today + D, window: WINDOW, limit: today + 2 * D };
-  return null;
+  let pref = null;
+  if (after) pref = { from: today, window: [((+after[1] % 12) + (after[2] === 'pm' ? 12 : 0)) * 60, AWAKE_END], limit: today + D };
+  else if (/\b(tonight|this evening)\b/.test(t)) pref = { from: today, window: [1020, AWAKE_END], limit: today + D };
+  else if (/\btomorrow\b/.test(t)) pref = { from: today + D, window: WINDOW, limit: today + 2 * D };
+  return { kind: 'basic', title: activity(request), minutes: parseMinutes(request) ?? 30, pref, past: /\byesterday\b/.test(t) };
 }
 
 // ---- result builders ----
@@ -199,10 +193,8 @@ export function discoverResult(ctx) {
   return { blocks, question: { text, items: blocks.map((b) => b.id) }, notes: ['Adding an activity to the calendar does not register or book it for you.'], meta: { kind: 'discover', timezone: TIMEZONE } };
 }
 
-// `known` is an already-understood intent (for example from a model); without it the request parser reads the request.
-export function planWith(input, solver, known) {
+export function planWith(input, solver, intent = understand(input)) {
   const ctx = { events: input.events ?? [], now: input.now, context: input.context ?? {} };
-  const intent = known ?? understand(input);
   switch (intent.kind) {
     case 'discover': return discoverResult(ctx);
     case 'basic': return basicResult(intent, ctx, solver.finder);

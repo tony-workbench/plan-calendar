@@ -42,7 +42,7 @@ function steps(intent, ctx) {
   return greedySteps(intent, ctx, greedyFinder);
 }
 
-export const solver = { finder, steps };
+const solver = { finder, steps };
 export const plan = async (input) => planWith(input, solver);
 export const replan = async (input) => replanWith(input, solver);
 export default { plan, replan };
