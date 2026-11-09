@@ -42,20 +42,34 @@ Nothing exists yet. The tests in `tests/` will show the state once the first ite
 
 The Calendar Agent calls the Gemini API; the key comes from the environment (`GEMINI_API_KEY`) and is never committed or printed. Offline tests use recorded or fake model replies and must pass without a key.
 
+## Implementation approaches
+
+The Calendar Agent is not fixed to one design. P1 compares these and picks one, or a combination:
+
+| Approach | What it is |
+| --- | --- |
+| Code | A deterministic planner: rules and search decide everything; a model only reads the user's sentence. |
+| Agent | A Gemini tool-calling loop decides the plan and the tool calls; code only checks the result. |
+| Workflow | A fixed chain of steps (understand, find slots, order, check, explain) with a model at chosen steps. |
+| Hybrid | Any mix, for example an agent that proposes and code that verifies and repairs. |
+
+Compare on the same benchmark in `tests/benchmark/`: the four situations with fixed calendars and expected properties. Score each approach on rule satisfaction (no overlap, fixed events never moved, ordered steps before the deadline, links asked at most once), flexibility on phrasings the rules did not foresee, latency, cost per request and how often a plan needs repair. Real-model runs use the owner's Gemini key, which stays on the owner's machine; the owner's coordinator records those scores in a verification record for the seats. Offline tests use recorded model replies.
+
 ## Work queue
 
 Take items in order. Coding seats are Claude, AdaL and Kylon's Claude agent; reviewing seats check the items named for them.
 
 | # | Goal | Acceptance | Who |
 | --- | --- | --- | --- |
-| P1 | Preview Calendar | A day and week view showing existing events and local preview blocks, two visually different kinds (fixed existing events and proposed blocks); drag to move a block; undo restores the state before the last change; tests cover drag and undo | Coding seats; AdaL and Masky verify |
-| P2 | Calendar Agent core over MCP | An MCP server exposes tools (read events, find free time, propose blocks); a Calendar Agent loop calls the Gemini API, picks tools and returns blocks; a fake model makes the tests offline; a hand-off function lets the main Agent pass a request and get the plan back | Coding seats; Kylon verifies |
-| P3 | Basic arrangement from Ask | "find time to work out for half an hour" yields one block in a free slot that overlaps nothing and does not move fixed events; the preview shows it with the existing events and nothing is written to Google Calendar | Coding seats; AdaL verifies |
-| P4 | Deadline back-planning | "demo due next Friday" yields ordered steps (outline, production, rehearsal) before the deadline around fixed events; dragging one step re-plans only the later steps; "production needs an hour more" re-plans the remaining work | Coding seats; Kylon verifies |
-| P5 | Related-item adjustment | The five rules above, covered by tests: ask once, merge into one question, partial answers, refusals not re-asked, fixed events never moved, undo of the whole change | Coding seats; AdaL and Masky verify |
-| P6 | Confirm, then sync | A Google Calendar adapter interface with a fake used in tests; confirm writes only the confirmed blocks; abandon writes nothing; real writes need the owner's OAuth and stay off | Coding seats |
-| P7 | Proactive activity discovery | Candidates come from a source interface with a fake; few or none when information is thin; one light prompt; ignoring does not reopen or re-ask; confirming syncs only the chosen item; each candidate shows content, time, place, reason, source | Coding seats; AdaL verifies |
-| P8 | Continuous roundtable | One unattended run completes two of P1–P4 | Claude coordinator |
+| P1 | Choose the implementation approach | Build the same small planner four ways behind one interface, and compare them on a fixed benchmark of the four situations (see "Implementation approaches"). The seats vote for the best version, with the numbers written in a record; the winner is the base for P3 onward | Coding seats each own one approach; every seat votes |
+| P2 | Preview Calendar | A day and week view showing existing events and local preview blocks, two visually different kinds (fixed existing events and proposed blocks); drag to move a block; undo restores the state before the last change; tests cover drag and undo | Coding seats; AdaL and Masky verify |
+| P3 | Calendar Agent core over MCP | An MCP server exposes tools (read events, find free time, propose blocks); a Calendar Agent loop calls the Gemini API, picks tools and returns blocks; a fake model makes the tests offline; a hand-off function lets the main Agent pass a request and get the plan back | Coding seats; Kylon verifies |
+| P4 | Basic arrangement from Ask | "find time to work out for half an hour" yields one block in a free slot that overlaps nothing and does not move fixed events; the preview shows it with the existing events and nothing is written to Google Calendar | Coding seats; AdaL verifies |
+| P5 | Deadline back-planning | "demo due next Friday" yields ordered steps (outline, production, rehearsal) before the deadline around fixed events; dragging one step re-plans only the later steps; "production needs an hour more" re-plans the remaining work | Coding seats; Kylon verifies |
+| P6 | Related-item adjustment | The five rules above, covered by tests: ask once, merge into one question, partial answers, refusals not re-asked, fixed events never moved, undo of the whole change | Coding seats; AdaL and Masky verify |
+| P7 | Confirm, then sync | A Google Calendar adapter interface with a fake used in tests; confirm writes only the confirmed blocks; abandon writes nothing; real writes need the owner's OAuth and stay off | Coding seats |
+| P8 | Proactive activity discovery | Candidates come from a source interface with a fake; few or none when information is thin; one light prompt; ignoring does not reopen or re-ask; confirming syncs only the chosen item; each candidate shows content, time, place, reason, source | Coding seats; AdaL verifies |
+| P9 | Continuous roundtable | One unattended run completes two of P1–P4 | Claude coordinator |
 
 Later, each needing its own decision: real Google Calendar writes, cross-device sync, public deployment.
 
