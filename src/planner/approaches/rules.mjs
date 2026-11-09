@@ -1,10 +1,8 @@
-// Approach 1: rules planner.
-// Fixed rules on the shared engine: the first free slot for one block, steps back-scheduled one per
-// day before the deadline, and later blocks pushed to the first free slot after a change. It never
-// backtracks and does not re-check the deadline when it pushes blocks.
-// Contract: default export { plan({request, events, now, context}), replan({plan, change, events, answers}) }.
+// Approach 1: plain rules. Parse the request, then place each block in the first free slot.
+import { planWith, replanWith, greedyFinder, greedySteps } from '../core.mjs';
 
-import { createPlanner, rulesStrategy } from '../lib/engine.mjs';
-import { adapt } from '../lib/adapt.mjs';
+const solver = { finder: greedyFinder, steps: (intent, ctx) => greedySteps(intent, ctx, greedyFinder) };
 
-export default adapt(createPlanner(rulesStrategy));
+export const plan = async (input) => planWith(input, solver);
+export const replan = async (input) => replanWith(input, solver);
+export default { plan, replan };

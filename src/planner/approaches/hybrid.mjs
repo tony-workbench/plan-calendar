@@ -1,30 +1,18 @@
-// Approach 4: hybrid.
-// Rules answer first because they are cheap and predictable. Every rules result is checked against the
-// hard rules (fixed events, overlaps, step order, deadline); a result that breaks one is redone by
-// constraint search. An optional model only reads requests the parser cannot (createHybrid({ model })).
-// Contract: default export { plan({request, events, now, context}), replan({plan, change, events, answers}) }.
+// Approach 4: hybrid. Rules draft the plan, a hard-rule check judges it, and constraint search takes over when the draft fails.
+// What the roundtable needs to see goes to meta.debug; `notes` only carries text that helps the user decide.
+import rules from './rules.mjs';
+import search from './search.mjs';
+import { validatePlan } from '../../../benchmark/contract.mjs';
 
-import { createPlanner, rulesStrategy, searchStrategy, violations } from '../lib/engine.mjs';
-import { adapt } from '../lib/adapt.mjs';
+const problems = (result, input) => validatePlan(result, { events: input.events ?? [], deadline: result.meta?.deadline }).violations.map((v) => v.code);
 
-// model.complete({ prompt }) -> JSON text { "minutes": number, "title": string } for a one-off task.
-export function createHybrid({ model } = {}) {
-  const interpret = model && (async (request) => {
-    try {
-      const r = JSON.parse(await model.complete({ prompt: JSON.stringify({ task: 'Read a scheduling request', request }) }));
-      return Number.isFinite(r?.minutes) && r.minutes > 0 ? { kind: 'basic', title: String(r.title || 'Task'), minutes: r.minutes, afterHour: null, sameDay: false } : null;
-    } catch { return null; }
-  });
-  const rules = createPlanner(rulesStrategy, { interpret });
-  const search = createPlanner(searchStrategy, { interpret });
-  const pick = async (input, call) => {
-    const first = await rules[call](input);
-    const empty = call === 'plan' && !first.blocks.length && input.context?.mode !== 'discover' && /\b(due|deadline)\b/i.test(input.request ?? '');
-    if (violations(first, input.events) === 0 && !empty) return { ...first, notes: [...first.notes, 'rules result passed the hard-rule check'] };
-    const second = await search[call](input);
-    return { ...second, notes: [...second.notes, 'rules result failed the hard-rule check, redone by search'] };
-  };
-  return adapt({ plan: (input) => pick(input, 'plan'), replan: (input) => pick(input, 'replan') });
+async function pick(run, input) {
+  const first = await run(rules), bad = problems(first, input);
+  if (!bad.length) return { ...first, meta: { ...first.meta, debug: { used: 'rules', violations: [] } } };
+  const second = await run(search);
+  return { ...second, meta: { ...second.meta, debug: { used: 'search', violations: bad } } };
 }
 
-export default createHybrid();
+export const plan = (input) => pick((p) => p.plan(input), input);
+export const replan = (input) => pick((p) => p.replan(input), input);
+export default { plan, replan };
