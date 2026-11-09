@@ -1,9 +1,8 @@
 // Approach 3: an Agent tool loop. A model chooses one tool call per turn; the loop runs the tool and feeds the result back.
-// The default model is a scripted offline policy, so this file sends nothing anywhere. A live model can be passed to createAgent({ model }):
-// src/planner/gemini.mjs and approaches/agent-live.mjs do that, and then the request, schedule and free windows go to the Gemini API.
-// That happens only when the caller asks for it and GEMINI_API_KEY is set; offline tests use fake replies.
+// With GEMINI_API_KEY set the default agent asks the live Gemini model (adapter: src/planner/gemini.mjs); otherwise, and in tests, a scripted offline policy runs.
 import { understand, basicResult, deadlineResult, discoverResult, replanWith, greedyFinder, STEP_VARIANTS, ceilTo, ms, iso, MIN, WINDOW } from '../core.mjs';
 import { validatePlan } from '../../../benchmark/contract.mjs';
+import { createGeminiModel } from '../gemini.mjs';
 
 const finder = greedyFinder;
 
@@ -58,7 +57,7 @@ function scriptedModel({ task, history }) {
   return submit({ blocks: [], notes: [], meta: { kind: 'none' } });
 }
 
-export function createAgent({ model = scriptedModel, maxTurns = 12 } = {}) {
+export function createAgent({ model = scriptedModel, maxTurns = 12, label } = {}) {
   async function run(task) {
     const toolbox = tools(task), history = [];
     for (let turn = 0; turn < maxTurns && !task.result; turn++) {
@@ -67,7 +66,7 @@ export function createAgent({ model = scriptedModel, maxTurns = 12 } = {}) {
       history.push({ call, out: await toolbox[call.tool](call.args ?? {}) });
     }
     if (!task.result) throw new Error('Agent ran out of turns without submitting a plan');
-    return task.result;
+    return label ? { ...task.result, meta: { ...task.result.meta, engine: label } } : task.result;
   }
   return {
     plan: (input) => run({ kind: 'plan', input, intent: understand(input) }),
@@ -75,7 +74,19 @@ export function createAgent({ model = scriptedModel, maxTurns = 12 } = {}) {
   };
 }
 
-const agent = createAgent();
-export const plan = (input) => agent.plan(input);
-export const replan = (input) => agent.replan(input);
+// The default agent calls the live Gemini model (GEMINI_API_KEY, GEMINI_MODEL) through the adapter in ../gemini.mjs.
+// The scripted policy is only the offline fallback: it runs when no key is set, when AGENT_OFFLINE=1, or inside `node --test`, so tests never reach the network.
+export const offline = (env = process.env) => !env.GEMINI_API_KEY || env.AGENT_OFFLINE === '1' || Boolean(env.NODE_TEST_CONTEXT);
+// Results of the offline fallback carry meta.engine = 'scripted-offline' (the live path sets 'gemini:<model>'), and a run outside tests says so on stderr,
+// so a benchmark report can never pass the script off as the model.
+let warned = false;
+export function createDefaultAgent(env = process.env) {
+  if (!offline(env)) return createAgent({ model: createGeminiModel({ env }), maxTurns: 3 });
+  if (!warned && !env.NODE_TEST_CONTEXT) { warned = true; console.error('agent: running the scripted OFFLINE policy, not the Gemini model (set GEMINI_API_KEY and unset AGENT_OFFLINE to use the model).'); }
+  return createAgent({ label: 'scripted-offline' });
+}
+
+// The choice is made per call from the current environment, so a key set later still follows the same offline guard.
+export const plan = (input) => createDefaultAgent().plan(input);
+export const replan = (input) => createDefaultAgent().replan(input);
 export default { plan, replan };

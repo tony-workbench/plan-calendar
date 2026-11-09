@@ -41,10 +41,12 @@ export function greedyFinder(from, length, o = {}) {
 // ---- understanding the request ----
 export function parseMinutes(text) {
   const t = text.toLowerCase();
-  if (/half an hour|half hour/.test(t)) return 30;
-  let m = t.match(/(\d+)\s*(?:minutes?|mins?)\b/);
+  if (/half an hour|half hour|half-hour/.test(t)) return 30;
+  if (/\b(?:an?|one)\s+(?:hour|hr)\s+and\s+a\s+half\b/.test(t)) return 90;
+  if (/\bquarter of an hour\b|\bquarter hour\b/.test(t)) return 15;
+  let m = t.match(/(\d+)[\s-]*(?:minutes?|mins?)\b/);
   if (m) return +m[1];
-  m = t.match(/(\d+(?:\.\d+)?)\s*(?:hours?|hrs?)\b/);
+  m = t.match(/(\d+(?:\.\d+)?)[\s-]*(?:hours?|hrs?)\b/);
   if (m) return Math.round(+m[1] * 60);
   m = t.match(/\b(an|a|one|two|three|four)\s+hours?\b/);
   return m ? { an: 1, a: 1, one: 1, two: 2, three: 3, four: 4 }[m[1]] * 60 : null;
@@ -53,6 +55,27 @@ export function parseMinutes(text) {
 export function parseDay(text, nowMs) {
   const t = text.toLowerCase();
   if (/\btoday\b/.test(t)) return dayStart(nowMs);
+  if (/\btomorrow\b/.test(t)) return dayStart(nowMs) + D;
+  const today0 = dayStart(nowMs), week0 = today0 - ((new Date(today0).getUTCDay() + 6) % 7) * D;
+  const eow = t.match(/\bend of (?:the )?(this |next )?week\b/);
+  if (eow) {
+    // On a weekend this week's Friday is already past, so "end of this week" means the coming Friday.
+    const friday = week0 + 4 * D + (eow[1] === 'next ' ? 7 * D : 0);
+    return friday < today0 ? friday + 7 * D : friday;
+  }
+  const inDays = t.match(/\bin (\d{1,2}) days?\b/);
+  if (inDays) return today0 + +inDays[1] * D;
+  const ord = t.match(/\b(?:the\s+)?(\d{1,2})(?:st|nd|rd|th)\b(?:\s+of\s+(\w+))?/) || t.match(/\b(january|february|march|april|may|june|july|august|september|october|november|december)\s+(\d{1,2})(?:st|nd|rd|th)?\b/);
+  if (ord) {
+    const months = ['january', 'february', 'march', 'april', 'may', 'june', 'july', 'august', 'september', 'october', 'november', 'december'];
+    const named = /^\d/.test(ord[1]) ? months.indexOf(ord[2] ?? '') : months.indexOf(ord[1]);
+    const dom = /^\d/.test(ord[1]) ? +ord[1] : +ord[2], base = new Date(today0);
+    if (dom >= 1 && dom <= 31) {
+      let month = named >= 0 ? named : base.getUTCMonth(), year = base.getUTCFullYear(), d = Date.UTC(year, month, dom);
+      if (d < today0) d = named >= 0 ? Date.UTC(year + 1, month, dom) : Date.UTC(year, month + 1, dom);
+      return d;
+    }
+  }
   const m = t.match(/\b(?:(this|next|on)\s+)?(monday|tuesday|wednesday|thursday|friday|saturday|sunday)\b/);
   if (!m) return null;
   const today = dayStart(nowMs), weekStart = today - ((new Date(today).getUTCDay() + 6) % 7) * D;
@@ -70,19 +93,19 @@ export function parseDeadline(text, nowMs) {
   return { ms: day + hour * H + (+m[2] || 0) * MIN, assumed: false };
 }
 
-const INTENT = /\b(find|schedule|need to|have to|want to|put|book|block|fit|plan|set aside|make time|when can|can you|help me|remind)\b/i;
-const DEADLINE = /\b(due|deadline|hand in|work back|submit)\b/i;
+const INTENT = /\b(find|schedule|need to|have to|want to|put|book|block|fit|plan|set aside|make time|when can|can you|help me|remind|hit the|go for|go to|squeeze in|carve out|i'd like to|i would like to|time for)\b/i;
+const DEADLINE = /\b(due|deadline|hand in|work back|submit|finish\b.*\bby|(?:ready|done|complete)\s+by)\b|\bby\s+(?:the\s+\d{1,2}(?:st|nd|rd|th)|end of)\b/i;
 const CUT = /\s+(?:for\s+(?:\d|half|an?\s|one|two|three|four)|tonight|this evening|yesterday|today|tomorrow|after\s|before\s|at\s\d|on\s)|[,?.!]/i;
 
 function activity(request) {
-  const m = request.match(/\bso i can\s+(.+)$/i) || request.match(/\bto\s+(.+)$/i);
+  const m = request.match(/\bso i can\s+(.+)$/i) || request.match(/\bto\s+(?!the\b)(.+)$/i) || request.match(/\b((?:hit|go to|go for|do|read|practice|call|clean|water|meditate)\b.+)$/i) || request.match(/\btime for\s+(.+)$/i) || request.match(/\bin\s+(?:a\s+)?(.+?)\s+session\b/i);
   if (!m) return 'Task';
   const cut = m[1].search(CUT);
   return cap((cut > -1 ? m[1].slice(0, cut) : m[1]).trim() || 'task');
 }
 
 function deliverable(request) {
-  const m = request.match(/^(.*?)\s+(?:is|are)\s+due/i) || request.match(/hand in\s+(.+?)\s+(?:today|this|next|on)\b/i) || request.match(/prep(?:aration)? for\s+(.+?)[.?!]?$/i);
+  const m = request.match(/^(.*?)\s+(?:(?:is|are)\s+)?due\b/i) || request.match(/hand in\s+(.+?)\s+(?:today|this|next|on|by)\b/i) || request.match(/\b(?:finish|complete|submit)\s+(.+?)\s+by\b/i) || request.match(/prep(?:aration)? for\s+(.+?)[.?!]?$/i);
   const what = (m ? m[1] : 'your deadline').replace(/^(the|my)\s+/i, '').trim();
   return cap(what || 'Deadline');
 }

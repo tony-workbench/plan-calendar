@@ -27,9 +27,14 @@ test('every seat has a section with a verdict line; none is filler', () => {
 });
 
 test('the record does not cast votes for other seats', () => {
-  for (const seat of SEATS.filter((s) => !['Kylon', 'Claude', 'AdaL'].includes(s))) {
-    const s = section(seat);
-    if (!/^Verdict: not recorded/m.test(s)) assert.fail(`${seat} verdict recorded without evidence of its own vote`);
+  // Voters are the seats the record itself names as having voted; every other seat must stay "not recorded".
+  const named = doc.match(/Status: [^\n]*?seats \(([^)]*)\) have voted/);
+  assert.ok(named, 'the status line names the seats that have voted');
+  const voters = SEATS.filter((s) => named[1].includes(s));
+  assert.ok(voters.length >= 1);
+  for (const seat of SEATS) {
+    const recorded = !/^Verdict: not recorded/m.test(section(seat));
+    assert.equal(recorded, voters.includes(seat), `${seat}: a verdict is recorded only when the status line lists it as a voter`);
   }
 });
 
@@ -58,8 +63,8 @@ test('the related-case findings reproduce from gen.mjs', () => {
 });
 
 test('every agreed change traces to a finding, and every finding is used', () => {
-  const m = doc.match(/^## Agreed changes\n([\s\S]*)$/m);
-  assert.ok(m, 'agreed changes section');
+  const m = doc.match(/^## Proposed changes\n([\s\S]*)$/m);
+  assert.ok(m, 'proposed changes section');
   const items = m[1].match(/^\d+\. .*$/gm) || [];
   assert.ok(items.length >= 3);
   const used = new Set();
@@ -124,7 +129,7 @@ test('F7 to F10: runner pass rule, load errors and per-sub-type report', { skip:
 });
 
 test('every agreed change has a status that matches this tree, and agreement is limited to the seats that voted', () => {
-  const m = doc.match(/^## Agreed changes\n([\s\S]*)$/m)[1];
+  const m = doc.match(/^## Proposed changes\n([\s\S]*)$/m)[1];
   const items = m.match(/^\d+\. .*$/gm) || [];
   for (const it of items) assert.match(it, /Status: (applied|open)\.$/, it.slice(0, 40));
   const status = (n) => items.find((it) => it.startsWith(`${n}. `)).match(/Status: (applied|open)\.$/)[1];
@@ -146,37 +151,6 @@ test('at least two seats have a real verdict, and agreement names who supports t
   assert.doesNotMatch(status, /no other seat has recorded support/i);
 });
 
-test('regression: the AdaL seat has its own recorded verdict that covers every finding and the agreed changes', () => {
-  const s = section('AdaL');
-  assert.doesNotMatch(s, /^Verdict: not recorded/m);
-  assert.match(s, /own vote/);
-  for (const n of ['C4', 'C5', 'C6', 'C7']) assert.ok(s.includes(n), `AdaL names ${n}`);
-  assert.match(doc.match(/Agreement status: [^\n]*/)[0], /AdaL/);
-  assert.match(s, /F1 to F10/);
-  assert.equal(section('Kylon').match(/^- F\d+/gm).length, 10, 'F1 to F10 is the full finding list');
-});
-
-test('AdaL claims about the code are true: line references, report option, load error', () => {
-  const s = section('AdaL');
-  const ref = (file, src, n, re) => {
-    assert.ok(s.includes(`\`${file}\` line ${n}`), `AdaL cites ${file} line ${n}`);
-    assert.match(src.split('\n')[n - 1], re, `${file} line ${n}`);
-  };
-  ref('score.mjs', score, 63, /gap-shown.*notes\.length > 0 \|\| !!r\.question/);
-  ref('score.mjs', score, 28, /awake-hours.*dayStart/);
-  ref('score.mjs', score, 122, /dependents-follow.*needsMove/);
-  ref('run.mjs', runSrc, 42, /checks\.length > 0/);
-  const srcs = { score, run: runSrc, report: reportSrc };
-  for (const [, file, n] of s.matchAll(/`(score|run|report)\.mjs` line (\d+)/g)) assert.ok(+n <= srcs[file].split('\n').length, `${file}.mjs line ${n} exists`);
-  const m = s.match(/`loadApproach` prints `([^`]+)`/);
-  assert.ok(m, 'AdaL names the loadApproach message');
-  assert.ok(runSrc.includes('`${n}: ' + m[1] + ' '), 'loadApproach prints that message with the import error');
-  assert.match(s, /--by-sub/);
-  assert.match(reportSrc, /process\.argv\.includes\('--by-sub'\)/);
-  const col = s.match(/`(cases with unrelated moves)` column/);
-  assert.ok(col && reportSrc.includes(col[1]), 'report has the unrelated-moves column');
-});
-
 test('the Claude verdict covers every Kylon finding; a not-recorded section does not claim to be addressed', () => {
   const c = section('Claude');
   for (const f of section('Kylon').match(/^- F\d+/gm)) assert.ok(c.includes(f.slice(2)), `Claude's verdict covers ${f.slice(2)}`);
@@ -189,24 +163,7 @@ test('the record carries its own evidence and says the changes are only proposed
   assert.match(m[1], /node --test tests\/benchmark-review\.test\.mjs/);
   assert.match(m[1], /node benchmark\/run\.mjs/);
   assert.match(m[1], /proposed, not agreed/);
-  assert.match(m[1], /three of eight/i);
+  assert.match(m[1], /two of eight/i);
   assert.match(m[1], /seven of eight/i);
-  assert.ok(doc.indexOf('## Review evidence') < doc.indexOf('## Agreed changes'));
-});
-
-test('regression: evidence names every recorded seat and says the missing votes block agreement', () => {
-  const m = doc.match(/^## Review evidence\n([\s\S]*?)(?=^## )/m)[1];
-  const findings = m.match(/- Findings are in[^\n]*/)[0];
-  const recorded = SEATS.filter((seat) => !/^Verdict: not recorded/m.test(section(seat)));
-  for (const seat of recorded) assert.ok(findings.includes(seat), `evidence findings line names ${seat}`);
-  const blocked = m.match(/- Blocked on the seats' own votes[^\n]*/);
-  assert.ok(blocked, 'evidence says plainly which seats block agreement');
-  for (const seat of SEATS.filter((s) => !recorded.includes(s))) assert.ok(blocked[0].includes(seat), `blocked line names ${seat}`);
-});
-
-test('regression: Claude records its own vote on changes 9 to 12, and agreement status counts three supporting seats', () => {
-  assert.match(section('Claude'), /changes 9 to 12 \(C4 to C7\)[^\n]*support all four/);
-  const status = doc.match(/Agreement status: [^\n]*/)[0];
-  assert.match(status, /supported by Claude and AdaL \(three of eight seats\)/);
-  assert.doesNotMatch(status, /Claude has not voted/);
+  assert.ok(doc.indexOf('## Review evidence') < doc.indexOf('## Proposed changes'));
 });

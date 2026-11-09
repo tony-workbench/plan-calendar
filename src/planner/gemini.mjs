@@ -27,6 +27,14 @@ export function freeWindows({ events = [], now }, days = 8, max = 24) {
   return out.slice(0, max).map((w) => ({ start: iso(w.start), end: iso(w.end) }));
 }
 
+// Guidance for the four situations in docs/PRODUCT-DIRECTION.md, so the live model is told what each one needs.
+export const SITUATIONS = [
+  'Situation 1, basic arrangement: one block of the requested length (default 30 minutes) in the earliest fitting free window, kind "task"; honour a stated day or time of day; add a short note on why that slot.',
+  'Situation 2, deadline back-planning: when the request has a deadline, split the prep into exactly three blocks with kind "task" and step 1, 2, 3 titled outline, production and rehearsal; step 2 has dependsOn [id of step 1] and step 3 dependsOn [id of step 2]; all blocks end before the deadline and sit in free windows. If the request names a goal but NO deadline, return no blocks and ask exactly ONE question: "question":{"text":"When is <goal> due?","items":[]}.',
+  'Situation 3, discovery: when the request asks what to do or the context lists interests, a city and free time, propose at most three candidate activities that match the context interests, each as a block with kind "candidate" in a free window; propose none if the context is thin; never invent a booking or registration.',
+  'Situation 4, replan after a change (a dragged block, more time, a set deadline or answers): return the FULL current plan, keep every fixed event and every block the change does not touch exactly where it is, and treat existing events as unmovable. Move other blocks only when a stated or clearly necessary order requires it, and mention each consequential move in notes. If several related items need confirmation, ask ONE merged question naming all of them in "question":{"text":...,"items":[the item titles]}, and change nothing until answers arrive; use only the links the answers confirmed.',
+].join('\n');
+
 export function buildPrompt(task, feedback = '') {
   const { input } = task;
   const now = input.now ?? input.plan?.meta?.now;
@@ -38,6 +46,7 @@ export function buildPrompt(task, feedback = '') {
     `The JSON must have exactly this shape: ${SCHEMA_TEXT}`,
     `Example: ${EXAMPLE}`,
     'Rules: every block needs id, title, start, end and kind; times are UTC ISO strings; blocks must not overlap each other or the existing events; use only the free windows below; keep steps in order with dependsOn; finish before any deadline. Never answer with prose or an {"answer": ...} object.',
+    SITUATIONS,
     `Now: ${now ?? ''}`,
     `Existing events: ${JSON.stringify(input.events ?? [])}`,
     now && `Free windows: ${JSON.stringify(freeWindows({ events: input.events ?? [], now }))}`,
@@ -49,7 +58,7 @@ export function buildPrompt(task, feedback = '') {
 export function buildRequest(prompt) {
   return {
     contents: [{ role: 'user', parts: [{ text: prompt }] }],
-    generationConfig: { responseMimeType: 'application/json', responseSchema: RESPONSE_SCHEMA, thinkingConfig: { thinkingBudget: 0 } },
+    generationConfig: { responseMimeType: 'application/json', responseSchema: RESPONSE_SCHEMA, temperature: 0, thinkingConfig: { thinkingBudget: 0 } },
   };
 }
 
@@ -62,11 +71,11 @@ export function parseReply(text) {
 }
 
 // The live reply carries no meta, so add what the validators and later replans read: kind, deadline, now and timezone.
-export function withMeta(result, task) {
+export function withMeta(result, task, env = process.env) {
   const { input, intent } = task, now = input.now ?? input.plan?.meta?.now;
   const base = task.kind === 'replan' ? { ...input.plan?.meta } : { kind: intent?.kind ?? (result.blocks.length ? 'basic' : 'none'), now };
   if (task.kind !== 'replan' && intent?.kind === 'deadline' && Number.isFinite(intent.deadline)) { base.deadline = iso(intent.deadline); base.deadlineAssumed = intent.assumed; }
-  return { ...result, meta: { ...base, ...result.meta, timezone: TIMEZONE } };
+  return { ...result, meta: { ...base, ...result.meta, timezone: TIMEZONE, engine: `gemini:${env.GEMINI_MODEL || 'gemini-3.8-flash'}` } };
 }
 
 // A model for createAgent({ model }): one API call per case, one retry if the reply has the wrong shape.
@@ -81,6 +90,6 @@ export function createGeminiModel({ fetch: doFetch = globalThis.fetch, env = pro
     if (!res.ok) throw new Error(`Gemini request failed with status ${res.status}`);
     const text = (await res.json()).candidates?.[0]?.content?.parts?.map((p) => p.text ?? '').join('') ?? '';
     const parsed = parseReply(text);
-    return parsed.result ? { tool: 'submit', args: { result: withMeta(parsed.result, task) } } : { tool: 'reject', args: { problem: parsed.problem } };
+    return parsed.result ? { tool: 'submit', args: { result: withMeta(parsed.result, task, env) } } : { tool: 'reject', args: { problem: parsed.problem } };
   };
 }
