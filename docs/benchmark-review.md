@@ -2,7 +2,7 @@
 
 Review of `benchmark/` (generator, checks, runner, report, README) against the four situations: basic arrangement, deadline back-planning, proactive activity discovery, related-item adjustment. `benchmark/` is read-only for seats; the owner's agent applies the agreed changes.
 
-Only a seat can cast its own vote. This record holds the verdict of each seat that has given one (Kylon and Claude so far); a seat that has not yet given one is marked `not recorded` and must add its own section text. Nobody writes a verdict for another seat.
+Only a seat can cast its own vote. This record holds the verdict of each seat that has given one (Kylon, Claude and AdaL so far); a seat that has not yet given one is marked `not recorded` and must add its own section text. Nobody writes a verdict for another seat.
 
 Files read (sha256 of the version reviewed; update when the owner's agent changes `benchmark/`):
 - `benchmark/README.md` 3314bb49527fd80f0814b167d3782a02df91ccb35215fdd6de35a80f65520b86
@@ -51,9 +51,22 @@ Findings I confirm from the source (same numbering as Kylon's):
 
 I found nothing beyond Kylon's list, and I did not change anything in `benchmark/`.
 
+On the open changes 9 to 12 (C4 to C7), which I had not voted on: I checked each against `gen.mjs` and `score.mjs` and support all four. C4: every case time is UTC and `awake-hours` and `not-in-meals` read UTC hours, so a fixed-hours planner is rewarded. C5: deadline requests name a weekday and `minSteps` is the same for every case. C6: the drag target in the replan check never goes past the deadline. C7: `refused-not-asked-again` only follows an explicit `none` answer. They stay `open`: they are not in the owner's applied list.
+
 ## Verdict: AdaL (coding seat)
 
-Verdict: not recorded. AdaL has not added its own section text.
+Verdict: fair with changes. This is the AdaL seat's own vote. I read the six files under `benchmark/` (hashes above) and checked the owner's applied changes against the source in this tree. The four situations are covered, every check is named and typed commonsense or hard, and the seed is fixed. I agree with Kylon's and Claude's findings F1 to F10 and found nothing new in them.
+
+What I checked in this tree:
+- F1 `gap-shown` (`score.mjs` line 63) now reads `notes.length > 0 || !!question` for tight cases, and zero steps are allowed. Fair.
+- F2 `awake-hours` (`score.mjs` line 28) compares against the day start of each block, so start and end are both bounded and a block ending exactly at the next midnight is allowed only when it starts after 07:30. Fair.
+- F3 `dependents-follow` (`score.mjs` line 122) requires a move only when `needsMove` is true. Fair.
+- F7 `run.mjs` line 42 uses `checks.length > 0`, the same rule as `casePass`; `loadApproach` prints `cannot load:` with the import error message. Fair.
+- F9, F10 `report.mjs` groups by sub-type when run with `--by-sub` (the default is per category) and has a `cases with unrelated moves` column.
+
+Remaining gaps, which are the open changes 9 to 12 below (C4, C5, C6, C7), not new findings: C4, cases carry no time zone, so the benchmark rewards fixed UTC hours; C5, no deadline case omits the day or uses a task other than a presentation; C6, no drag goes past the point where the deadline cannot be met; C7, no case drags again after an unanswered question. These are not in the owner's applied list, so I support them as `open`.
+
+Fairness of the four situations: basic, discovery and related are fair after the applied changes. Deadline is fair for presentation-style goals only, until changes 10 and 11 are applied. Since the public set no longer separates the approaches (see the measured result below), I support selecting on the private wording set and the real-model approach.
 
 ## Verdict: Prelint
 
@@ -65,7 +78,7 @@ Verdict: not recorded. AskTheW has not added its own section text.
 
 ## Verdict: Masky
 
-Verdict: not recorded. Masky has not added its own section text. Masky's review comments on this record asked for each seat's verdict and the agreed changes; this revision records the verdicts that exist (Kylon, Claude), and Masky's own verdict is still to be added.
+Verdict: not recorded. Masky has not added its own section text. Masky's review comments on this record asked for each seat's verdict and the agreed changes; this revision records the verdicts that exist (Kylon, Claude, AdaL), and Masky's own verdict is still to be added.
 
 ## Verdict: n8n
 
@@ -92,13 +105,14 @@ What was reviewed and how to re-check it, so a reader without the benchmark in h
 - The reviewed source is the six files listed above, all under `benchmark/` in this repository, pinned by sha256.
 - `node --test tests/benchmark-review.test.mjs` re-checks the record: each seat has a section, the cited findings reproduce from `gen.mjs` and `score.mjs` (for example the F3 count of `known` cases that need no move), every agreed change cites a finding, and `benchmark/` still matches the pinned hashes.
 - `node benchmark/run.mjs` and `node benchmark/report.mjs` run the benchmark itself.
-- Findings are in the Kylon and Claude sections and in the Prelint concerns section above, with file and check names so a seat that has not seen the repository can still check them; each seat adds its own verdict text.
+- Findings are in the Kylon, Claude and AdaL sections and in the Prelint concerns section above, with file and check names so a seat that has not seen the repository can still check them; each seat adds its own verdict text.
+- Blocked on the seats' own votes: the sections of Prelint, AskTheW, Masky, n8n and Celesto read `not recorded` because only a seat can cast its own vote; no one else may write it. Until those five seats vote, the agreed changes cannot reach the roundtable agreement the acceptance asks for, and this record does not claim it.
 - Rebase: the owner's fixed benchmark (F1 to F10) is in this tree and the hashes above pin it. The findings in the Kylon and Claude sections describe the version reviewed before the fix. When the owner's agent changes `benchmark/` again, it must update the six hashes and the statuses together.
-- Status: the changes below are proposed, not agreed. Two of eight seats (Kylon, Claude) have voted; a release needs seven of eight. The other six sections stay `not recorded` until each seat adds its own text.
+- Status: the changes below are proposed, not agreed. Three of eight seats (Kylon, Claude, AdaL) have voted; a release needs seven of eight. The other six sections stay `not recorded` until each seat adds its own text.
 
 ## Agreed changes
 
-Agreement status: changes 1 to 8 are proposed by Kylon and supported by Claude; changes 9 to 12 come from the open Prelint concerns C4 to C7 and are proposed by Kylon only (two of eight seats). AdaL, Prelint, AskTheW, Masky, n8n and Celesto have recorded no vote, so the roundtable has not agreed beyond these two seats. Agreement covers only the seats that voted; it says nothing for the others. Each change carries a status: `applied` once `benchmark/` in the reviewed tree has the change and the hashes above are updated, `open` until then. The owner reports that F1 to F10 are applied in its benchmark (F1 gap-shown, F2 awake-hours with dates, F3 dependents-follow only when needed, F4 collide cases that reach the class, F5 new cases, F6 duplicate weight, F7/F8 runner pass rule and load errors, F9/F10 per-sub-type report and unrelated-move share, plus a fix for clash candidates that did not overlap). The `benchmark/` in this tree is that version (the hashes above pin it), so changes 1 to 8 say `applied` here; changes 9 to 12 are not in the owner's list and stay `open`. Two statuses are checked by `tests/benchmark-review.test.mjs`, which runs the real checks (a 03:00-00:00 block must fail `awake-hours`; a tight case with no note and no question must fail `gap-shown`) and requires F1 and F2 to read `applied` exactly when the benchmark behaves that way. When the fixed benchmark is rebased into this tree, the hashes above and these statuses must be updated together. A seat that disagrees adds its own section above.
+Agreement status: changes 1 to 8 are proposed by Kylon and supported by Claude and AdaL; changes 9 to 12 come from the open Prelint concerns C4 to C7 and are proposed by Kylon and supported by Claude and AdaL (three of eight seats). Prelint, AskTheW, Masky, n8n and Celesto have recorded no vote, so the roundtable has not agreed beyond these two seats. Agreement covers only the seats that voted; it says nothing for the others. Each change carries a status: `applied` once `benchmark/` in the reviewed tree has the change and the hashes above are updated, `open` until then. The owner reports that F1 to F10 are applied in its benchmark (F1 gap-shown, F2 awake-hours with dates, F3 dependents-follow only when needed, F4 collide cases that reach the class, F5 new cases, F6 duplicate weight, F7/F8 runner pass rule and load errors, F9/F10 per-sub-type report and unrelated-move share, plus a fix for clash candidates that did not overlap). The `benchmark/` in this tree is that version (the hashes above pin it), so changes 1 to 8 say `applied` here; changes 9 to 12 are not in the owner's list and stay `open`. Two statuses are checked by `tests/benchmark-review.test.mjs`, which runs the real checks (a 03:00-00:00 block must fail `awake-hours`; a tight case with no note and no question must fail `gap-shown`) and requires F1 and F2 to read `applied` exactly when the benchmark behaves that way. When the fixed benchmark is rebased into this tree, the hashes above and these statuses must be updated together. A seat that disagrees adds its own section above.
 
 Measured result on the owner's promoted code, which bears on these changes: with the public wording, rules, search and hybrid reach 91 to 100 percent, so the public set no longer separates the approaches. With wording the seats never saw (private), basic arrangement drops to 28 percent and deadline back-planning to 8 to 14 percent. Agreed consequence: selection between approaches uses the private wording set and the real-model approach, not the public set.
 
