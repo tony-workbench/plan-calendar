@@ -6,6 +6,7 @@ import * as I from './contract.mjs';
 const MIN = 60000;
 
 const ms = (v) => Date.parse(v);
+const dayStart = (v) => Math.floor(ms(v) / 86400000) * 86400000;
 const hm = (v) => { const d = new Date(ms(v)); return d.getUTCHours() * 60 + d.getUTCMinutes(); };
 const dayOf = (v) => Math.floor((ms(v) - Date.parse('2026-11-09T00:00:00.000Z')) / 86400000);
 const MEALS = [[450, 480], [720, 780], [1110, 1170]]; // 7:30-8:00, 12:00-13:00, 18:30-19:30
@@ -24,7 +25,7 @@ const viol = (plan, opts, codes) => I.validatePlan(plan, opts).violations.filter
 function life(c, blocks, now) { // commonsense rules from the PRD: not in the past, awake hours, not in meals
   const real = blocks.filter((b) => b.kind !== 'candidate');
   c.add('not-in-past', 'commonsense', real.every((b) => ms(b.start) >= ms(now)));
-  c.add('awake-hours', 'commonsense', real.every((b) => hm(b.start) >= 450 && hm(b.end) <= 1410 || (hm(b.end) === 0)));
+  c.add('awake-hours', 'commonsense', real.every((b) => hm(b.start) >= 450 && (ms(b.end) - dayStart(b.start) <= 1410 * MIN || ms(b.end) - dayStart(b.start) === 1440 * MIN)));
   c.add('not-in-meals', 'commonsense', real.every((b) => !MEALS.some((m) => overlapsMin(hm(b.start), hm(b.end) || 1440, m))));
 }
 
@@ -57,9 +58,9 @@ async function deadline(p, k, c) {
   const e = k.expect, dl = ms(e.deadline);
   const r = c.q(await p.plan({ request: k.request, events: k.events, now: k.now, context: k.context }));
   const steps = [...r.blocks].sort((a, b) => ms(a.start) - ms(b.start));
-  c.add('enough-steps', 'hard', steps.length >= e.minSteps);
+  if (!e.tight) c.add('enough-steps', 'hard', steps.length >= e.minSteps);
   c.add('before-deadline', 'hard', steps.every((b) => ms(b.end) <= dl));
-  if (e.tight) c.add('gap-shown', 'hard', steps.length > 0 && (steps.every((b) => ms(b.end) <= dl) || r.notes.length > 0 || !!r.question) && (r.notes.length > 0 || !!r.question || steps.length >= e.minSteps));
+  if (e.tight) c.add('gap-shown', 'hard', r.notes.length > 0 || !!r.question);   // nothing can fit: the plan must say so (zero steps are fine)
   c.add('no-overlap', 'commonsense', viol(r, { events: k.events }, ['overlap-event', 'overlap-block']).length === 0);
   c.add('steps-ordered', 'commonsense', viol(r, {}, ['order']).length === 0);
   life(c, r.blocks, k.now);
@@ -116,7 +117,9 @@ async function related(p, k, c) {
   const evViol = (x) => viol(x, { events, eventsBefore: events }, ['moved-event', 'overlap-event']).length;
   if (e.known) {
     c.add('no-question', 'hard', !ask.question);
-    c.add('dependents-follow', 'hard', moved(ask, rest.slice(0, 1)));
+    const firstB = byId(base, first), newEnd = ms(k.change.start) + (ms(firstB.end) - ms(firstB.start));
+    const needsMove = ms(byId(base, rest[0]).start) < newEnd;   // a planner that moves nothing is right when the dependent already clears the dragged block
+    c.add('dependents-follow', 'hard', needsMove ? moved(ask, rest.slice(0, 1)) : true);
     c.add('unrelated-untouched', 'hard', unchanged(ask, [e.other]));
     c.side(sidecount(ask, chain));
     c.add('order-kept', 'commonsense', viol(ask, {}, ['order']).length === 0 && chain.every((id, i) => i === 0 || ms(byId(ask, id).start) >= ms(byId(ask, chain[i - 1]).end)));

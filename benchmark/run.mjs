@@ -28,7 +28,7 @@ const prep = (k) => k.context?.candidates ? { ...k, context: { ...k.context, sou
 
 const dir = path.join(project, 'src/planner/approaches');
 const names = arg('approach') ? arg('approach').split(',') : fs.readdirSync(dir).filter((f) => f.endsWith('.mjs')).map((f) => f.slice(0, -4)).sort();
-async function loadApproach(n) { try { const m = await import(pathToFileURL(path.join(dir, n + '.mjs')).href); const p = m.default; return p && typeof p.plan === 'function' && typeof p.replan === 'function' ? p : null; } catch { return null; } }
+async function loadApproach(n) { try { const m = await import(pathToFileURL(path.join(dir, n + '.mjs')).href); const p = m.default; if (p && typeof p.plan === 'function' && typeof p.replan === 'function') return p; console.log(`${n}: not a planner (no default export with plan and replan)`); return null; } catch (err) { console.log(`${n}: cannot load: ${String(err.message).slice(0, 160)}`); return null; } }
 const cs = cases();
 fs.mkdirSync(out, { recursive: true });
 for (const name of names) {
@@ -39,7 +39,7 @@ for (const name of names) {
   for (const k of cs) for (let rep = 0; rep < repeat; rep++) {
     const r = await scoreCase(planner, prep(structuredClone(k)), +arg('timeout', 60000));
     r.rep = rep; fs.appendFileSync(file, JSON.stringify(r) + '\n');
-    n++; if (r.delivered && r.checks.every((x) => x.ok)) pass++;
+    n++; if (r.delivered && r.checks.length > 0 && r.checks.every((x) => x.ok)) pass++;
   }
   console.log(`${name}: ${pass}/${n} cases fully passed -> ${file}`);
 }

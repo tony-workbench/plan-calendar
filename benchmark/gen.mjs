@@ -44,6 +44,8 @@ const BASIC_FORMS = [
 const NOTPLAN = ['Last night we had hotpot, so happy', 'I just finished a great run this morning', 'Yesterday I called my mom and it was lovely', 'That movie was amazing, I cried twice', 'I walked the dog an hour ago'];
 const DELIVS = ['the demo', 'the quarterly report', 'the grant application', 'my thesis chapter', 'the pitch deck', 'the design spec'];
 const WEEKDAY_FORMS = [['this Friday', 4], ['next Wednesday', 9], ['next Thursday', 10], ['next Friday', 11]]; // day index from Monday Nov 9 = 0
+const V2 = process.env.BENCH_PHRASING === 'v2';
+const X = V2 ? (await import('./private-phrasings.mjs')).default : null;
 const INTERESTS = ['crafts', 'music', 'food', 'tech', 'sports', 'film'];
 const CITY = 'Springfield';
 const MEAL_CHAINS = [
@@ -53,23 +55,36 @@ const MEAL_CHAINS = [
 ];
 
 function basic(r, i, sub) {
-  const [act] = r.pick(ACTS); const [dtxt, dmin] = r.pick(DURS);
+  const [act] = r.pick(X?.acts ?? ACTS); const [dtxt, dmin] = r.pick(DURS);
   let events, request, expect = { blocks: 1, minutes: dmin, noQuestion: true };
-  if (sub === 'simple') { events = makeEvents(r, 0, 4, r.int(2, 5)); request = r.pick(BASIC_FORMS)(act, dtxt); }
-  else if (sub === 'crowded') { events = [...fullDay(0, 'x'), ...makeEvents(r, 1, 3, 2, 'y')]; request = r.pick(BASIC_FORMS)(act, dtxt); expect.notDay = 0; }
+  if (sub === 'simple') { events = makeEvents(r, 0, 4, r.int(2, 5)); request = r.pick(X?.basic ?? BASIC_FORMS)(act, dtxt); }
+  else if (sub === 'crowded') { events = [...fullDay(0, 'x'), ...makeEvents(r, 1, 3, 2, 'y')]; request = r.pick(X?.basic ?? BASIC_FORMS)(act, dtxt); expect.notDay = 0; }
   else if (sub === 'noduration') { events = makeEvents(r, 0, 4, r.int(1, 4)); request = `I need to ${act}`; expect = { blocks: 1, minMinutes: 15, maxMinutes: 180, noQuestion: true }; }
-  else if (sub === 'notplan') { events = makeEvents(r, 0, 4, 2); request = r.pick(NOTPLAN); expect = { blocks: 0, noQuestion: true }; }
-  else { events = makeEvents(r, 0, 2, 6); request = `${r.pick(BASIC_FORMS)(act, dtxt)} this evening after 8 pm`; expect.afterHour = 20; expect.day = 0; }
+  else if (sub === 'notplan') { events = makeEvents(r, 0, 4, 2); request = r.pick(X?.notplan ?? NOTPLAN); expect = { blocks: 0, noQuestion: true }; }
+  else if (sub === 'backtoback') { // consecutive events leave only a few exact gaps
+    events = []; for (let h = 9; h < 17; h++) if (r.chance(0.8)) events.push({ id: `b${h}`, title: r.pick(TITLES), start: iso(at(0, h)), end: iso(at(0, h + 1)) });
+    events.push(...makeEvents(r, 1, 3, 2, 'z')); request = r.pick(X?.basic ?? BASIC_FORMS)(act, dtxt);
+  } else if (sub === 'crossmidnight') { // an evening event running past midnight; the request is for tonight
+    events = [{ id: 'late', title: 'Late flight', start: iso(at(0, 21)), end: iso(at(1, 1)) }, ...makeEvents(r, 1, 3, 2, 'z')];
+    request = `${r.pick(X?.basic ?? BASIC_FORMS)(act, dtxt)} tonight`; expect.day = 0; expect.beforeHour = 21;
+  } else if (sub === 'pastday') { // names a day that has already passed: the plan must not land in the past
+    events = makeEvents(r, 0, 3, 3); request = `${r.pick(X?.basic ?? BASIC_FORMS)(act, dtxt)} yesterday`; expect = { blocks: 1, minutes: dmin, notPast: true };
+  } else { events = makeEvents(r, 0, 2, 6); request = `${r.pick(X?.basic ?? BASIC_FORMS)(act, dtxt)} this evening after 8 pm`; expect.afterHour = 20; expect.day = 0; }
   return { category: 'basic', sub, request, events, context: {}, expect };
 }
 
 function deadline(r, i, sub) {
-  const [when, dIdx] = r.pick(sub === 'drag' || sub === 'moretime' ? WEEKDAY_FORMS.slice(1) : WEEKDAY_FORMS);
+  const WF = X?.weekdays ?? WEEKDAY_FORMS;
+  const [when, dIdx] = sub === 'today' ? ['today', 0] : r.pick(sub === 'drag' || sub === 'moretime' ? WF.slice(1) : WF);
   const dl = at(dIdx, 17);
-  const what = r.pick(DELIVS);
-  const request = r.pick([`${what[0].toUpperCase() + what.slice(1)} is due ${when}, help me plan the prep`, `I have to hand in ${what} ${when}. Plan my prep time.`, `Work back from ${when} and schedule the prep for ${what}`]);
-  const events = sub === 'tight' ? [...fullDay(1, 'a'), ...fullDay(2, 'b'), ...fullDay(3, 'c'), ...makeEvents(r, 0, dIdx, 2, 'd')].filter((e) => Date.parse(e.start) < dl) : makeEvents(r, 0, dIdx, r.int(2, 6));
-  return { category: 'deadline', sub, request, events, context: {}, expect: { deadline: iso(dl), minSteps: 2, change: sub === 'drag' ? { type: 'drag', shiftDays: r.int(1, 2) } : sub === 'moretime' ? { type: 'more-time', minutes: 60 } : null, tight: sub === 'tight' } };
+  const what = r.pick(X?.delivs ?? DELIVS);
+  const request = X ? r.pick(X.deadlineForms)(what, when) : r.pick([`${what[0].toUpperCase() + what.slice(1)} is due ${when}, help me plan the prep`, `I have to hand in ${what} ${when}. Plan my prep time.`, `Work back from ${when} and schedule the prep for ${what}`]);
+  let events;
+  if (sub === 'tight') { // every day from now to the deadline is taken: nothing can fit, the plan has to say so
+    events = []; for (let d = 0; d <= dIdx; d++) { const wd = new Date(dayMs(d)).getUTCDay(); if (wd !== 0 && wd !== 6) events.push(...fullDay(d, 't' + d)); }
+    events = events.filter((e) => Date.parse(e.start) < dl);
+  } else events = makeEvents(r, 0, Math.max(dIdx, 1), r.int(2, 6)).filter((e) => Date.parse(e.start) < dl);
+  return { category: 'deadline', sub, request, events, context: {}, expect: { deadline: iso(dl), minSteps: 2, change: sub === 'drag' ? { type: 'drag', shiftDays: r.int(1, 2) } : sub === 'moretime' ? { type: 'more-time', minutes: 60 } : null, tight: sub === 'tight', today: sub === 'today' } };
 }
 
 function discovery(r, i, sub) {
@@ -80,13 +95,13 @@ function discovery(r, i, sub) {
     const d = r.int(0, 5), s = at(d, r.int(17, 20)) , e = s + r.pick([1, 2]) * H;
     const kind = sub === 'novalid' ? r.pick(['clash', 'nosource', 'offtopic']) : r.pick(['ok', 'ok', 'ok', 'clash', 'nosource', 'offtopic']);
     let start = s, end = e;
-    if (kind === 'clash' && events.length) { const ev = r.pick(events); start = Date.parse(ev.start) + 30 * MIN; end = start + H; }
+    if (kind === 'clash' && events.length) { const ev = r.pick(events); start = Date.parse(ev.start) + 5 * MIN; end = start + H; }   // starts inside the event, so it truly overlaps
     cands.push({ id: `a${k + 1}`, title: `${kind === 'clash' ? 'Clashing ' : ''}Event ${k + 1}`, start: iso(start), end: iso(end), place: 'Hall ' + (k + 1), reason: `Matches ${r.pick(interests)}`, source: kind === 'nosource' ? undefined : 'listing', tags: kind === 'offtopic' ? ['combat'] : [r.pick(interests)], _kind: kind });
   }
   if (sub === 'fewvalid') { let ok = 0; for (const c of cands) if (c._kind === 'ok' && ++ok > 2) { c._kind = 'nosource'; delete c.source; } }
   const validIds = cands.filter((c) => c._kind === 'ok' && !events.some((ev) => Date.parse(c.start) < Date.parse(ev.end) && Date.parse(c.end) > Date.parse(ev.start))).map((c) => c.id);
   const ctx = { mode: 'discover', interests: sub === 'thin' ? [] : interests, city: CITY, ...(sub === 'dismissed' ? { dismissed: true } : {}), candidates: cands.map(({ _kind, ...c }) => c) };
-  return { category: 'discovery', sub, request: r.pick(['Anything fun this week?', 'What is going on this week that I might like?', 'Any good events coming up?']), events, context: ctx, expect: { validIds, maxBlocks: 3, none: sub === 'thin' || sub === 'dismissed' || validIds.length === 0 } };
+  return { category: 'discovery', sub, request: r.pick(X?.discovery ?? ['Anything fun this week?', 'What is going on this week that I might like?', 'Any good events coming up?']), events, context: ctx, expect: { validIds, maxBlocks: 3, none: sub === 'thin' || sub === 'dismissed' || validIds.length === 0 } };
 }
 
 function related(r, i, sub) {
@@ -95,17 +110,17 @@ function related(r, i, sub) {
   let t = slotStart; const blocks = chain.map(([id, title, mins], k) => { const s = t + (k === 0 ? 0 : r.int(0, 3) * 30 * MIN); const e = s + mins * MIN; t = e + 30 * MIN; return { id, title, start: iso(s), end: iso(e), kind: 'proposed', group: 'g1', ...(sub === 'known' && k > 0 ? { dependsOn: [chain[k - 1][0]] } : {}) }; });
   const other = { id: 'other', title: "Tomorrow's groceries", start: iso(at(day, 14)), end: iso(at(day, 14, 30)), kind: 'proposed', group: 'g2' };
   const evs = [{ id: 'f1', title: 'Dentist', start: iso(at(day, 8)), end: iso(at(day, 9)) }];
-  if (sub === 'collide') evs.push({ id: 'f2', title: 'Evening class', start: iso(at(day, 19)), end: iso(at(day, 21)) });
   const shift = r.int(2, 5) * 30 * MIN; const first = blocks[0];
+  if (sub === 'collide') { const lastEnd = Date.parse(blocks[blocks.length - 1].end) + shift; evs.push({ id: 'f2', title: 'Evening class', start: iso(lastEnd - 30 * MIN), end: iso(lastEnd + 90 * MIN) }); }
   const change = { type: 'drag', blockId: first.id, start: iso(Date.parse(first.start) + shift) };
   return { category: 'related', sub, request: 'Move the first item later', events: evs, context: {}, plan: { blocks: [...blocks, other], notes: [], meta: { kind: 'related' } }, change, expect: { chain: chain.map((c) => c[0]), other: 'other', known: sub === 'known', collide: sub === 'collide', partial: chain.length > 2 ? chain[1][0] : null } };
 }
 
 const SUBS = {
-  basic: [['simple', 4], ['crowded', 2], ['noduration', 2], ['notplan', 1], ['evening', 1]],
-  deadline: [['normal', 4], ['tight', 2], ['drag', 2], ['moretime', 2]],
+  basic: [['simple', 4], ['crowded', 2], ['noduration', 2], ['notplan', 1], ['evening', 1], ['backtoback', 2], ['crossmidnight', 1], ['pastday', 1]],
+  deadline: [['normal', 4], ['tight', 2], ['drag', 2], ['moretime', 2], ['today', 1]],
   discovery: [['normal', 5], ['fewvalid', 2], ['novalid', 1], ['thin', 1], ['dismissed', 1]],
-  related: [['unknown', 5], ['known', 2], ['collide', 2], ['unknown', 1]],
+  related: [['unknown', 6], ['known', 2], ['collide', 2]],
 };
 const MAKE = { basic, deadline, discovery, related };
 
