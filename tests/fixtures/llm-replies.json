@@ -1,0 +1,8 @@
+{
+  "plan|Find time to work out for half an hour": {
+    "blocks": [
+      { "id": "block-1", "title": "Workout", "start": "2026-11-09T09:00:00.000Z", "end": "2026-11-09T09:30:00.000Z", "kind": "proposed" }
+    ],
+    "notes": ["recorded reply (replay-only)"]
+  }
+}
