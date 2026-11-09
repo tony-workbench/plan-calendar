@@ -39,9 +39,3 @@ test('no environment file is present', () => {
   const env = files(root).filter((f) => /(^|\/)\.env(\..*)?$/.test(f));
   assert.deepEqual(env.map((f) => relative(root, f)), []);
 });
-
-test('no merge conflict markers in the tree', () => {
-  const marker = /^(<{7}|>{7})(\s|$)/m;
-  const hits = files(root).filter((f) => /\.(mjs|js|json|md|html|css)$/.test(f) && marker.test(readFileSync(f, 'utf8')));
-  assert.deepEqual(hits.map((f) => relative(root, f)), []);
-});

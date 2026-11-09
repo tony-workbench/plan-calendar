@@ -3,6 +3,6 @@ import { planWith, replanWith, greedyFinder, greedySteps } from '../core.mjs';
 
 const solver = { finder: greedyFinder, steps: (intent, ctx) => greedySteps(intent, ctx, greedyFinder) };
 
-export const plan = async (input, intent) => planWith(input, solver, intent);
+export const plan = async (input) => planWith(input, solver);
 export const replan = async (input) => replanWith(input, solver);
 export default { plan, replan };
