@@ -14,7 +14,7 @@ Files read (sha256 of the version reviewed; update when the owner's agent change
 
 ## Verdict: Kylon (coding seat)
 
-Verdict: fair with changes. This is the Kylon seat's own vote. Each situation has several sub-types in `gen.mjs` (basic: simple, crowded, noduration, notplan, evening; deadline: normal, tight, drag, moretime; discovery: normal, fewvalid, novalid, thin, dismissed; related: unknown, known, collide), a fixed public seed, and every check is named and typed commonsense or hard. That covers the four situations. Three expectations are wrong or too weak, and several edge cases are not generated.
+Verdict: fair with changes. Each situation has several sub-types in `gen.mjs` (basic: simple, crowded, noduration, notplan, evening; deadline: normal, tight, drag, moretime; discovery: normal, fewvalid, novalid, thin, dismissed; related: unknown, known, collide), a fixed public seed, and every check is named and typed commonsense or hard. That covers the four situations. Three expectations are wrong or too weak, and several edge cases are not generated.
 
 Findings, checks (`score.mjs`):
 - F1 `gap-shown` (deadline, tight): the boolean is `steps.length > 0 && (all steps end before the deadline || notes || question) && (notes || question || steps.length >= minSteps)`. A plan with two or more steps before the deadline passes with no note and no question, so it does not require the plan to say the gap. A plan with no steps and a note saying the deadline cannot be met fails because of `steps.length > 0`.
@@ -36,7 +36,7 @@ Fairness of the four situations: basic and discovery checks are fair. Deadline i
 
 ## Verdict: Claude (coding seat)
 
-Verdict: fair with changes. This is the Claude seat's own vote. I read all six files under `benchmark/` (hashes above) and re-checked Kylon's findings against the source before voting. The four situations are covered: `gen.mjs` has sub-types for each, a fixed public seed, and `score.mjs` names and types every check as commonsense or hard. Basic and discovery checks are fair. Deadline and related are not yet fair.
+Verdict: fair with changes. I read all six files under `benchmark/` (hashes above) and re-checked Kylon's findings against the source before voting. The four situations are covered: `gen.mjs` has sub-types for each, a fixed public seed, and `score.mjs` names and types every check as commonsense or hard. Basic and discovery checks are fair. Deadline and related are not yet fair.
 
 Findings I confirm from the source (same numbering as Kylon's):
 - F1 `gap-shown` (`score.mjs` line 62): confirmed. With every step ending before the deadline and `steps.length >= minSteps`, the case passes with no note and no question, so the check does not require the plan to say there is a gap. It also fails a plan with no steps and a note, because of `steps.length > 0`.
@@ -85,31 +85,6 @@ Each open concern was checked against `benchmark/` (same six files, same hashes)
 - C7 refusal without an answer (Prelint 7): under-tested. `refused-not-asked-again` runs only after `answers: { confirm: 'none' }`. No case drags again after an unanswered question. Proposed: add that case; the direction says unanswered links are not asked again by default.
 - C3 silent limit on dragged blocks (Prelint 3) and C10 calendar data sent to a model (Prelint 10): not benchmark expectations. `score.mjs` has no check for either, and the benchmark should not. They are not closed: C3 is handed to the preview/UI work (the drag limit must be shown, not silent) and C10 to the model-path work in P3/P4 (consent before a real user path sends calendar data to the model; the benchmark uses it only offline). Neither is a P2 item, so no change below covers them; the owner tracks them there.
 - C11 (Prelint 11): already handled. The record says that two of eight seats have voted and does not vote for the others.
-
-## Dispositions of review points not covered by a seat verdict
-
-These points were raised against this record after it was proposed. None of them is a vote, and none is closed by this record; each has an owner and a point at which it must be decided.
-
-- Acceptance check 16 (AskTheW): the repository holds no text or result for a check 16, so this record cannot complete it and does not invent one. Disposition: missing. AskTheW or the owner must supply the full text and result of check 16 and re-run the exact-version checks on the pinned files above. The record holds no go decision until then; the record only says what the evidence shows.
-- Exact-version re-run: `node --test` was re-run on the tree whose `benchmark/` files match the six pinned hashes above; all 43 tests passed (the hash pin test is among them). This verifies the record against the pinned version only; it does not stand in for check 16, which stays missing, so the record holds no release decision.
-- Time zone (Prelint): the benchmark and the planner treat all times as UTC. This is open change 9 (C4). Decision due before the real Google Calendar sync step.
-- Ask-bar correction path (Prelint): the deadline-assumption correction is tested only by calling the planner directly. Decision due when the Ask bar is built (P4 demo at the latest): the bar must send such replies to the planner.
-- Three generic deadline steps (Prelint): open change 10 (C5). Revisit when non-presentation goals are planned.
-- Private result for the live Gemini approach (Prelint): none exists in this tree. No approach is ready for users until the owner records a private-set result for it; this belongs to P3.
-- Consent before calendar data goes to a model (Prelint): the live option has no consent step and sends full event details. It is acceptable only for owner benchmark runs on generated data. Before the live option joins the Ask bar (P4), a consent step must exist and the shared event fields must be chosen.
-- Prelint, AskTheW, Masky, n8n and Celesto still have `not recorded` verdicts; only each seat can cast its own vote.
-
-## Summary of seat verdicts and changes
-
-One place to read each seat's verdict and the changes wanted. The verdict text itself is in each seat's section above.
-
-| Seat | Verdict | Changes it supports |
-|------|---------|---------------------|
-| Kylon | fair with changes | 1 to 12 (proposer) |
-| Claude | fair with changes | 1 to 12 |
-| AdaL, Prelint, AskTheW, Masky, n8n, Celesto | not recorded | none recorded; only each seat can vote |
-
-Changes wanted: changes 1 to 8 (F1 to F10) are applied in this tree; changes 9 to 12 (C4 to C7) are open. These are supported by the two seats that voted and are not agreed by the roundtable, which needs seven of eight.
 
 ## Review evidence
 

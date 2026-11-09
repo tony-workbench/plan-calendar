@@ -1,0 +1,6 @@
+{
+  "basic": { "request": "Could you squeeze in forty-five minutes of yoga for me?", "reply": "{\"kind\":\"basic\",\"activity\":\"yoga\",\"minutes\":45}" },
+  "basic-fenced": { "request": "I'd love a long walk, say an hour, once work is done tomorrow", "reply": "```json\n{\"kind\":\"basic\",\"activity\":\"long walk\",\"minutes\":60,\"when_text\":\"tomorrow\"}\n```" },
+  "deadline": { "request": "Pitch goes live on Friday at 3 pm... help me get ready", "reply": "{\"kind\":\"deadline\",\"activity\":\"investor pitch\",\"deadline_text\":\"Friday at 3 pm\"}" },
+  "discover": { "request": "Got any ideas for my evenings?", "reply": "{\"kind\":\"discover\",\"interests\":[\"music\"]}" }
+}
