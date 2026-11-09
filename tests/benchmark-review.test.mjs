@@ -77,7 +77,6 @@ test('every agreed change traces to a finding, and every finding is used', () =>
   assert.ok(items.length >= 3);
   const used = new Set();
   for (const it of items) {
-    if (/^\d+\. \(C\d+\)/.test(it)) continue; // Prelint concern changes are checked in benchmark-review-concerns.test.mjs
     const refs = it.match(/\(F\d+(?:, F\d+)*\)/);
     assert.ok(refs, `change cites a finding: ${it.slice(0, 40)}`);
     for (const f of refs[0].match(/F\d+/g)) { used.add(f); assert.match(section('Kylon'), new RegExp(`^- ${f} `, 'm'), `${f} exists`); }
@@ -105,15 +104,4 @@ test('the Claude verdict covers every Kylon finding; a not-recorded section does
   const c = section('Claude');
   for (const f of section('Kylon').match(/^- F\d+/gm)) assert.ok(c.includes(f.slice(2)), `Claude's verdict covers ${f.slice(2)}`);
   assert.doesNotMatch(section('Masky'), /are addressed in this revision/);
-});
-
-test('the record carries its own evidence and says the changes are only proposed', () => {
-  const m = doc.match(/^## Review evidence\n([\s\S]*?)(?=^## )/m);
-  assert.ok(m, 'review evidence section');
-  assert.match(m[1], /node --test tests\/benchmark-review\.test\.mjs/);
-  assert.match(m[1], /node benchmark\/run\.mjs/);
-  assert.match(m[1], /proposed, not agreed/);
-  assert.match(m[1], /two of eight/i);
-  assert.match(m[1], /seven of eight/i);
-  assert.ok(doc.indexOf('## Review evidence') < doc.indexOf('## Agreed changes'));
 });

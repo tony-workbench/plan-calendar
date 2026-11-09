@@ -119,3 +119,53 @@ test('the llm-agent loop plans through its model, calls the activity tool and re
   assert.equal(d.blocks.length, 1);
   assert.ok(d.blocks[0].tentative && d.question);
 });
+
+test('an ignored question is not re-asked, and a drag shifts only dependents it actually overlaps', async () => {
+  const at = (h) => `2026-11-10T${h}:00.000Z`;
+  const blk = (id, title, a, b, group, dependsOn) => ({ id, title, start: at(a), end: at(b), group, dependsOn });
+  const plan = { blocks: [blk('shop', 'Shopping', '09:00', '10:00', 'meal'), blk('cook', 'Cooking', '14:00', '15:00', 'meal'), blk('later', 'Later', '15:30', '16:30', 'z', ['shop'])], notes: [] };
+  for (const [name, p] of Object.entries(APPROACHES)) {
+    if (name === 'llm-agent') continue;
+    const r1 = await p.replan({ plan, change: { type: 'drag', blockId: 'shop', start: at('11:00') }, events: [] });
+    assert.deepEqual(r1.question.items, ['shop', 'cook'], name);
+    assert.equal(r1.blocks.find((b) => b.id === 'later').start, at('15:30'), `${name} shifted a dependent that was already clear`);
+    const r2 = await p.replan({ plan: r1, change: { type: 'drag', blockId: 'shop', start: at('11:30') }, events: [] });
+    assert.ok(!r2.question, `${name} re-asked an ignored question`);
+  }
+});
+
+test('step plans: an ignored question is not re-asked, more-time re-plans, and a missed deadline is noted', async () => {
+  const at = (h) => `2026-11-10T${h}:00.000Z`;
+  const blk = (id, a, b, extra = {}) => ({ id, title: id, start: at(a), end: at(b), ...extra });
+  const plan = {
+    blocks: [blk('s1', '09:00', '10:00', { step: 1, group: 'g' }), blk('s2', '11:00', '12:00', { step: 2, group: 'g', dependsOn: ['s1'] }), blk('s3', '13:00', '14:00', { step: 3, dependsOn: ['s2'] })],
+    notes: [], meta: { kind: 'plan', now: at('08:00'), deadline: at('17:00') },
+  };
+  for (const [name, p] of Object.entries(APPROACHES)) {
+    if (name === 'llm-agent') continue;
+    const r1 = await p.replan({ plan, change: { type: 'drag', blockId: 's1', start: at('09:30') }, events: [] });
+    const r2 = await p.replan({ plan: r1, change: { type: 'drag', blockId: 's1', start: at('09:45') }, events: [] });
+    assert.ok(!r2.question, `${name} re-asked an ignored question on a step plan`);
+    const more = await p.replan({ plan: r2, change: { type: 'more-time', blockId: 's2', extraMinutes: 60 }, events: [] });
+    const s2 = more.blocks.find((b) => b.id === 's2'), s3 = more.blocks.find((b) => b.id === 's3');
+    assert.equal(Date.parse(s2.end) - Date.parse(s2.start), 120 * 60000, `${name} more-time did not grow the block`);
+    assert.ok(Date.parse(s3.start) >= Date.parse(s2.end), `${name} left step 3 before step 2 ends`);
+    const late = await p.replan({ plan: r2, change: { type: 'drag', blockId: 's1', start: at('16:00') }, events: [] });
+    if (late.blocks.some((b) => Date.parse(b.end) > Date.parse(plan.meta.deadline))) assert.ok(late.notes.some((n) => /deadline/.test(n)), `${name} missed the deadline silently`);
+  }
+});
+
+test('llm-agent replan keeps the plan meta and asks only what the model reply asks', async () => {
+  const { createAgent, createFakeModel } = await import('../src/planner/approaches/llm-agent.mjs');
+  const at = (h) => `2026-11-10T${h}:00.000Z`;
+  const prev = { blocks: [{ id: 'a', title: 'A', start: at('09:00'), end: at('10:00') }], notes: [], meta: { kind: 'plan', now: at('08:00'), deadline: at('17:00') } };
+  const change = { type: 'drag', blockId: 'a', start: at('11:00') };
+  const moved = { blocks: [{ id: 'a', title: 'A', start: at('11:00'), end: at('12:00') }] };
+  const key = (asked) => `replan|${JSON.stringify(change)}|null|${asked}`;
+  const agent = createAgent({ model: createFakeModel({ [key('fresh')]: moved, [key('asked')]: moved }) });
+  const r1 = await agent.replan({ plan: prev, change, events: [] });
+  assert.equal(r1.question, undefined);
+  assert.equal(r1.meta.deadline, prev.meta.deadline);
+  const r2 = await agent.replan({ plan: { ...r1, question: { text: 'q', items: ['a'] } }, change, events: [] });
+  assert.equal(r2.question, undefined, 'an ignored question was asked again');
+});

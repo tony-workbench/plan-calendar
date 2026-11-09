@@ -41,7 +41,8 @@
   <span class="spacer"></span>
   <button id="btn-undo" type="button" disabled>Undo</button>
 </header>
-<div id="legend">Solid locked blocks are existing events. Dashed blocks are proposed and can be dragged. Nothing is saved to Google Calendar.</div>
+<div id="legend">Solid locked blocks are existing events. Dashed blocks are proposed and can be dragged. Blocks snap to 15 minutes and stay between 07:00 and 21:00 inside the visible week. Times are shown in UTC. Nothing is saved to Google Calendar.</div>
+<div id="notice" role="status" style="padding:0 16px 8px;color:#b45309;font-size:12px"></div>
 <div id="cal"></div>
 <script>
 (function () {
@@ -107,7 +108,7 @@
   }
 
   function getState() {
-    return { view: state.view, anchor: state.anchor, events: clone(state.events), canUndo: history.length > 0 };
+    return { view: state.view, anchor: state.anchor, events: clone(state.events), canUndo: history.length > 0, notice: state.notice || '' };
   }
 
   // Mirrors src/calendar/store.mjs: fixed cannot move, one history entry per change.
@@ -117,7 +118,12 @@
     var t = Date.parse(startIso);
     if (isNaN(t)) return false;
     var dur = Date.parse(ev.end) - Date.parse(ev.start);
-    var start = clampStart(snap(t), dur);
+    var wanted = snap(t);
+    var start = clampStart(wanted, dur);
+    state.notice = start !== wanted
+      ? 'Moved to ' + hhmm(new Date(start).toISOString()) + ': blocks stay between 07:00 and 21:00 inside the visible week.'
+      : '';
+    showNotice();
     if (start === Date.parse(ev.start)) return false;
     history.push(clone(state.events));
     ev.start = new Date(start).toISOString();
@@ -157,6 +163,12 @@
   function pad(n) { return (n < 10 ? '0' : '') + n; }
   function hhmm(iso) { var d = new Date(iso); return pad(d.getUTCHours()) + ':' + pad(d.getUTCMinutes()); }
   function dayLabel(ms) { var d = new Date(ms); return DAYS[(d.getUTCDay() + 6) % 7] + ' ' + (d.getUTCMonth() + 1) + '/' + d.getUTCDate(); }
+
+  function showNotice() {
+    if (typeof document === 'undefined' || !document.getElementById) return;
+    var n = document.getElementById('notice');
+    if (n) n.textContent = state.notice || '';
+  }
 
   var drag = null;
 

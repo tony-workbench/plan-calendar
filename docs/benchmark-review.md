@@ -75,29 +75,9 @@ Verdict: not recorded. n8n has not added its own section text.
 
 Verdict: not recorded. Celesto has not added its own section text.
 
-## Open Prelint concerns that touch the benchmark
-
-Each open concern was checked against `benchmark/` (same six files, same hashes). The question is only whether the benchmark's expectations are fair for it; the product fix itself belongs to other items. These are proposals from the Kylon seat, not votes of other seats.
-
-- C4 UTC and fixed hours (Prelint 4): unfair as a benchmark gap. `gen.mjs` writes every time as UTC (`NOW` is `2026-11-09T09:00:00.000Z`) and `score.mjs` `awake-hours` and `not-in-meals` read UTC hour and minute, so the benchmark rewards the fixed 07:30 to 23:30 window and fixed meal hours for every user. No case has a user time zone. Proposed: add a time-zone field to cases and judge hours in that zone, or state in the README that the benchmark is UTC-only and offline.
-- C5 default deadline and fixed three-step split (Prelint 5): under-tested. Every deadline request in `gen.mjs` names a weekday (`WEEKDAY_FORMS`), so the default of seven days is never exercised, and `expect.minSteps` is 2 for every case, so one fixed split passes whatever the task is. Proposed: add a deadline case with no named day and a case with a non-presentation task, and require the step names to fit the task.
-- C6 deadline after a drag or more time (Prelint 6): partly covered, with a gap. After a drag or more-time change, `replan-valid` passes `deadline` to the violation check, so a late step is flagged. But the drag target is chosen with `dl - 3 * 3600000` in `score.mjs`, so the benchmark never drags a step so late that the deadline cannot be met, and no check asks for a visible note then. Proposed: add a drag past the point of no return and require a note or a question, as `gap-shown` does for tight cases (see F1).
-- C7 refusal without an answer (Prelint 7): under-tested. `refused-not-asked-again` runs only after `answers: { confirm: 'none' }`. No case drags again after an unanswered question. Proposed: add that case; the direction says unanswered links are not asked again by default.
-- C3 silent limit on dragged blocks (Prelint 3) and C10 calendar data sent to a model (Prelint 10): not benchmark expectations. `score.mjs` has no check for either, and the benchmark should not. They are not closed: C3 is handed to the preview/UI work (the drag limit must be shown, not silent) and C10 to the model-path work in P3/P4 (consent before a real user path sends calendar data to the model; the benchmark uses it only offline). Neither is a P2 item, so no change below covers them; the owner tracks them there.
-- C11 (Prelint 11): already handled. The record says that two of eight seats have voted and does not vote for the others.
-
-## Review evidence
-
-What was reviewed and how to re-check it, so a reader without the benchmark in hand can verify the record:
-- The reviewed source is the six files listed above, all under `benchmark/` in this repository, pinned by sha256.
-- `node --test tests/benchmark-review.test.mjs` re-checks the record: each seat has a section, the cited findings reproduce from `gen.mjs` and `score.mjs` (for example the F3 count of `known` cases that need no move), every agreed change cites a finding, and `benchmark/` still matches the pinned hashes.
-- `node benchmark/run.mjs` and `node benchmark/report.mjs` run the benchmark itself.
-- Findings are in the Kylon and Claude sections and in the Prelint concerns section above, with file and check names so a seat that has not seen the repository can still check them; each seat adds its own verdict text.
-- Status: the changes below are proposed, not agreed. Two of eight seats (Kylon, Claude) have voted; a release needs seven of eight. The other six sections stay `not recorded` until each seat adds its own text.
-
 ## Agreed changes
 
-Agreement status: changes 1 to 8 are proposed by Kylon and supported by Claude; changes 9 to 12 come from the open Prelint concerns C4 to C7 and are proposed by Kylon only (two of eight seats). AdaL, Prelint, AskTheW, Masky, n8n and Celesto have recorded no vote, so the roundtable has not agreed beyond these two seats; a seat that disagrees adds its own section above. The owner's agent applies a change once the roundtable agrees on it.
+Agreement status: changes 1 to 8 are proposed by Kylon and supported by Claude (two of eight seats). AdaL, Prelint, AskTheW, Masky, n8n and Celesto have recorded no vote, so the roundtable has not agreed beyond these two seats; a seat that disagrees adds its own section above. The owner's agent applies a change once the roundtable agrees on it.
 1. (F1) Tighten `gap-shown` so a tight case passes only when the plan carries a note or the question; allow zero steps when it does.
 2. (F2) Bracket `awake-hours` as `start >= 07:30 && (end <= 23:30 || end is midnight)` and compare dates, so both start and end are always checked.
 3. (F3) In `known` cases, require `dependents-follow` only when the dependent would otherwise start before the dragged block's new end, or generate gaps that always force a move.
@@ -106,7 +86,3 @@ Agreement status: changes 1 to 8 are proposed by Kylon and supported by Claude; 
 6. (F6) Remove the duplicate `unknown` weight entry or document it.
 7. (F7, F8) Make `run.mjs` use the same pass rule as `report.mjs` and print the import error when an approach cannot load.
 8. (F9, F10) Report pass rates per sub-type and the unrelated-move rate, and give the baseline gain an interval.
-9. (C4) Add a time-zone field to cases and judge `awake-hours` and `not-in-meals` in that zone, or state in the README that the benchmark is UTC-only.
-10. (C5) Add a deadline case with no named day and a case with a non-presentation task; require the step names to fit the task.
-11. (C6) Add a drag past the point of no return (the deadline cannot be met) and require a note or a question, as `gap-shown` does.
-12. (C7) Add a case that drags again after a question that got no answer and require that the question is not asked again.

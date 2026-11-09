@@ -38,6 +38,8 @@ export function* slots({ busy, from, until, minutes, mode = 'strict' }) {
 const WORDS = { one: 1, two: 2, three: 3, four: 4 };
 const DAYS = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'];
 const STEPS = [['outline', 60], ['production', 120], ['rehearsal', 60]];
+// Titles are generic work phases; the ids keep the step keys. Any subject (a tax return) reads sensibly.
+const PHASE = { outline: 'plan and gather', production: 'main work', rehearsal: 'final check' };
 
 export function minutesIn(text) {
   const t = text.toLowerCase();
@@ -52,11 +54,11 @@ export function minutesIn(text) {
 function deadlineOf(request, now) {
   const base = dayStart(toMs(now));
   const m = request.toLowerCase().match(/\b(this|next)\s+(sunday|monday|tuesday|wednesday|thursday|friday|saturday)\b/);
-  if (!m) return base + 7 * DAY + 17 * HOUR;
+  if (!m) return { at: base + 7 * DAY + 17 * HOUR, assumed: true };
   const monday = base - ((new Date(base).getUTCDay() + 6) % 7) * DAY;
   let d = monday + ((DAYS.indexOf(m[2]) + 6) % 7 + (m[1] === 'next' ? 7 : 0)) * DAY + 17 * HOUR;
   if (d <= toMs(now)) d += 7 * DAY;
-  return d;
+  return { at: d, assumed: false };
 }
 
 const subjectOf = (r) => (r.match(/\b(?:the|my)\s+(.+?)\s+is due/i) || r.match(/hand in\s+(?:the|my)?\s*(.+?)\s+(?:this|next)\b/i) || r.match(/prep for\s+(?:the|my)?\s*(.+?)\s*$/i))?.[1]?.toLowerCase() ?? 'project';
@@ -64,7 +66,7 @@ const activityOf = (r) => (r.match(/\bso I can ([a-z ]+?)(?: for | this |[.,?]|$
 
 // -> { kind: 'none' } | { kind: 'basic', ... } | { kind: 'deadline', ... }
 export function parseRequest(request = '', now) {
-  if (/\b(due|deadline|hand in|work back)\b/i.test(request)) return { kind: 'deadline', subject: subjectOf(request), deadline: deadlineOf(request, now) };
+  if (/\b(due|deadline|hand in|work back)\b/i.test(request)) { const d = deadlineOf(request, now); return { kind: 'deadline', subject: subjectOf(request), deadline: d.at, assumedDeadline: d.assumed }; }
   if (!/\b(find time|need to|schedule|in my calendar|help me find|when can i|can you)\b/i.test(request)) return { kind: 'none' };
   const after = request.match(/after\s+(\d{1,2})\s*(am|pm)/i);
   const hour = after ? (+after[1] % 12) + (after[2].toLowerCase() === 'pm' ? 12 : 0) : null;
@@ -97,7 +99,10 @@ function placeTail(tail, { busy, ends }, { bound, backtrack, mode }) {
     out.length = i;
     return false;
   };
-  return go(0) ? out.map(({ id, start }) => ({ id, start })) : null;
+  if (!go(0)) return null;
+  const res = out.map(({ id, start }) => ({ id, start }));
+  res.notes = mode === 'relaxed' ? ['Protected meal hours could not be kept, so they were ignored for the moved blocks.'] : [];
+  return res;
 }
 
 export const rulesStrategy = {
@@ -114,7 +119,14 @@ export const rulesStrategy = {
     return starts;
   },
   // Pushes later blocks to the first free slot, never looking at the deadline.
-  reflow: (tail, ctx) => ['strict', 'relaxed'].map((mode) => placeTail(tail, ctx, { bound: Infinity, backtrack: false, mode })).find(Boolean) ?? null,
+  reflow(tail, ctx) {
+    const r = ['strict', 'relaxed'].map((mode) => placeTail(tail, ctx, { bound: Infinity, backtrack: false, mode })).find(Boolean) ?? null;
+    if (r && Number.isFinite(ctx.deadline)) {
+      const mins = new Map(tail.map((t) => [t.id, t.minutes]));
+      if (r.some((x) => x.start + mins.get(x.id) * MIN > ctx.deadline)) r.notes.push('The moved blocks now end after the deadline.');
+    }
+    return r;
+  },
 };
 
 export const searchStrategy = {
@@ -142,7 +154,10 @@ export const searchStrategy = {
     const bounds = Number.isFinite(ctx.deadline) ? [ctx.deadline, Infinity] : [Infinity];
     for (const bound of bounds) for (const mode of ['strict', 'relaxed']) {
       const r = placeTail(tail, ctx, { bound, backtrack: true, mode });
-      if (r) return r;
+      if (r) {
+        if (bound === Infinity && Number.isFinite(ctx.deadline)) r.notes.push('Nothing fits before the deadline any more, so the moved blocks now end after it.');
+        return r;
+      }
     }
     return null;
   },
@@ -178,12 +193,13 @@ async function planWith(strategy, interpret, { request = '', events = [], now, c
   const busy = events.map(span);
   if (intent.kind === 'deadline') {
     const subject = intent.subject, slug = subject.replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'project';
-    const steps = STEPS.map(([key, minutes]) => ({ id: `${slug}-${key}`, title: `${cap(subject)} ${key}`, minutes }));
+    const steps = STEPS.map(([key, minutes]) => ({ id: `${slug}-${key}`, title: `${cap(subject)}: ${PHASE[key]}`, minutes }));
     const m = { ...meta, deadline: toIso(intent.deadline) };
     const starts = strategy.backPlan({ busy, from, deadline: intent.deadline, steps });
     if (!starts) return { blocks: [], notes: ['no room before the deadline'], meta: m };
     const blocks = steps.map((s, i) => ({ id: s.id, title: s.title, start: toIso(starts[i]), end: toIso(starts[i] + s.minutes * MIN), kind: 'proposed', step: i + 1, dependsOn: i ? [steps[i - 1].id] : [] }));
-    return { blocks, notes: [], meta: m };
+    const notes = intent.assumedDeadline ? [`No day was named, so I assumed the deadline is ${toIso(intent.deadline)}. Tell me the real date to change it.`] : [];
+    return { blocks, notes, meta: m };
   }
   const lo = intent.afterHour == null ? from : Math.max(from, dayStart(from) + intent.afterHour * HOUR);
   const until = intent.sameDay ? dayStart(from) + DAY : from + HORIZON;
@@ -196,9 +212,14 @@ function replanWith(strategy, { plan: prev, change, events = [], answers }) {
   const blocks = prev.blocks.map((b) => ({ ...b, start: toMs(b.start), end: toMs(b.end) }));
   const meta = { ...(prev.meta ?? {}) }, notes = [], evBusy = events.map(span);
   const pending = meta.pending;
-  delete meta.pending;
+  // A question stays open until answered; a new drag that ignores it counts as declining it.
+  if (change && pending && !answers) meta.declined = [...new Set([...(meta.declined ?? []), ...(pending.mates ?? [])])];
+  if (change || answers) delete meta.pending;
   blocks.forEach((b) => { delete b.moved; });
-  const done = (extra = {}) => ({ blocks: blocks.map(toBlock), notes, meta, ...extra });
+  const done = (extra = {}) => {
+    if (Number.isFinite(deadline) && blocks.some((b) => b.kind !== 'candidate' && b.end > deadline)) notes.push('some blocks now end after the deadline');
+    return { blocks: blocks.map(toBlock), notes, meta, ...extra };
+  };
   const byId = (id) => blocks.find((b) => b.id === id);
   const deadline = meta.deadline ? toMs(meta.deadline) : Infinity;
 
@@ -210,6 +231,7 @@ function replanWith(strategy, { plan: prev, change, events = [], answers }) {
     const tail = [...extraTail, ...moving].map((b) => ({ id: b.id, minutes: (b.end - b.start) / MIN, floor: floors.get(b.id), deps: depsOf(b) }));
     const placed = strategy.reflow(tail, ctx);
     if (!placed) { notes.push('no room to re-plan'); return; }
+    notes.push(...(placed.notes ?? []));
     for (const { id, start } of placed) { const b = byId(id), dur = b.end - b.start; if (start !== b.start) b.moved = true; b.start = start; b.end = start + dur; }
   };
 
@@ -226,7 +248,7 @@ function replanWith(strategy, { plan: prev, change, events = [], answers }) {
       for (const b of blocks) if (!seen.has(b.id) && (b.dependsOn ?? []).some((d) => seen.has(d))) { seen.add(b.id); dependents.push(b); grew = true; }
     }
     dependents.sort((a, b) => a.start - b.start);
-    const floors = new Map(dependents.map((b) => [b.id, minimal ? b.start : b.start + delta]));
+    const floors = new Map(dependents.map((b) => [b.id, minimal || b.start >= target.end ? b.start : b.start + delta]));
     const grows = change.type === 'more-time' || !!(change.minutes ?? change.extraMinutes);
     if (grows) floors.set(target.id, oldStart);
     reflow(dependents, floors, (b) => b.dependsOn ?? [], grows ? [target] : []);

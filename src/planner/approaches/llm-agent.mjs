@@ -147,9 +147,20 @@ export function createAgent({ model = createGeminiModel() } = {}) {
       return fromReply(text, { kind: 'plan', now: toIso(now) }, events);
     },
     async replan({ plan: prev, change, events = [], answers }) {
+      // An ignored question (a new change with no answer) counts as a refusal and is remembered in meta,
+      // so it is not asked again on the next drag even if the model would ask.
+      const pending = prev.meta?.pending ?? (prev.question ? { mates: prev.question.items ?? [] } : null);
+      const meta = { ...(prev.meta ?? { kind: 'plan' }) };
+      delete meta.pending;
+      if (change && !answers && pending) meta.declined = [...new Set([...(meta.declined ?? []), ...(pending.mates ?? [])])];
       const key = `replan|${JSON.stringify(change ?? null)}|${JSON.stringify(answers ?? null)}|${prev.question ? 'asked' : 'fresh'}`;
-      const { text } = await runLoop({ model, key, task: { plan: prev.blocks, change, answers }, tools: planTools(events, prev.meta?.now ?? new Date().toISOString()) });
-      return fromReply(text, prev.meta ?? { kind: 'plan' }, events);
+      const { text } = await runLoop({ model, key, task: { plan: prev.blocks, change, answers, declined: meta.declined ?? [] }, tools: planTools(events, prev.meta?.now ?? new Date().toISOString()) });
+      const out = fromReply(text, meta, events);
+      if (meta.declined?.length && out.question) {
+        const open = out.question.items.filter((id) => !meta.declined.includes(id));
+        if (open.length < 2) delete out.question;
+      }
+      return out;
     },
   };
 }
@@ -158,8 +169,13 @@ export function createAgent({ model = createGeminiModel() } = {}) {
 // whose note says the model was unavailable, instead of throwing, so the shared benchmark can run it
 // offline. That result is not a quality score.
 const live = createAgent();
+// Live use sends the request and the calendar events to an outside model service. Set
+// PLANNER_NO_EXTERNAL_MODEL=1 to refuse that; each live result also says so in its notes.
+export const DISCLOSURE = 'Your request and calendar events were sent to an outside model service.';
+const useLive = (env = process.env) => !!env.GEMINI_API_KEY && env.PLANNER_NO_EXTERNAL_MODEL !== '1';
+const disclose = async (p) => { const r = await p; return { ...r, notes: [...(r.notes ?? []), DISCLOSURE] }; };
 const unavailable = (kind, now) => ({ blocks: [], notes: ['model unavailable: GEMINI_API_KEY is not set'], meta: { kind, ...(now ? { now: toIso(now) } : {}) } });
 export default {
-  plan: (input) => (process.env.GEMINI_API_KEY ? live.plan(input) : Promise.resolve(unavailable('plan', input.now))),
-  replan: (input) => (process.env.GEMINI_API_KEY ? live.replan(input) : Promise.resolve({ ...unavailable('plan'), blocks: input.plan?.blocks ?? [], meta: input.plan?.meta ?? { kind: 'plan' } })),
+  plan: (input) => (useLive() ? disclose(live.plan(input)) : Promise.resolve(unavailable('plan', input.now))),
+  replan: (input) => (useLive() ? disclose(live.replan(input)) : Promise.resolve({ ...unavailable('plan'), blocks: input.plan?.blocks ?? [], meta: input.plan?.meta ?? { kind: 'plan' } })),
 };
