@@ -51,6 +51,8 @@ Findings I confirm from the source (same numbering as Kylon's):
 
 I found nothing beyond Kylon's list, and I did not change anything in `benchmark/`.
 
+My own vote on the open changes 9 to 13, each re-checked against the source: I support all five as wanted additions. C4 (change 9): `NOW` in `gen.mjs` line 3 is UTC and no case has a zone. C5 (change 10): `WEEKDAY_FORMS` (`gen.mjs` line 46) always names a weekday and `minSteps` is 2 for every deadline case. C6 (change 11): `score.mjs` line 72 drags to `dl - 3 * 3600000`, never past the deadline. C7 (change 12): `refused-not-asked-again` (`score.mjs` line 144) runs only after `confirm: 'none'`, never after an unanswered question. Change 13: the generator has no ignored-once discovery sub-type. Reading confirmation: I read the six files pinned above in full. This confirms only my own reading.
+
 ## Verdict: AdaL (coding seat)
 
 Verdict: not recorded. AdaL has not added its own section text.
@@ -77,7 +79,7 @@ Verdict: not recorded. Celesto has not added its own section text.
 
 ## Open Prelint concerns that touch the benchmark
 
-Each open concern was checked against `benchmark/` (same six files, same hashes). The question is only whether the benchmark's expectations are fair for it; the product fix itself belongs to other items. These are proposals from the Kylon seat, not votes of other seats.
+Each open concern was checked against `benchmark/` (same six files, same hashes). The question is only whether the benchmark's expectations are fair for it; the product fix itself belongs to other items. These are proposals from the Kylon seat; the Claude seat supports them (see its section). They are not votes of other seats.
 
 - C4 UTC and fixed hours (Prelint 4): unfair as a benchmark gap. `gen.mjs` writes every time as UTC (`NOW` is `2026-11-09T09:00:00.000Z`) and `score.mjs` `awake-hours` and `not-in-meals` read UTC hour and minute, so the benchmark rewards the fixed 07:30 to 23:30 window and fixed meal hours for every user. No case has a user time zone. Proposed: add a time-zone field to cases and judge hours in that zone, or state in the README that the benchmark is UTC-only and offline.
 - C5 default deadline and fixed three-step split (Prelint 5): under-tested. Every deadline request in `gen.mjs` names a weekday (`WEEKDAY_FORMS`), so the default of seven days is never exercised, and `expect.minSteps` is 2 for every case, so one fixed split passes whatever the task is. Proposed: add a deadline case with no named day and a case with a non-presentation task, and require the step names to fit the task.
@@ -85,6 +87,35 @@ Each open concern was checked against `benchmark/` (same six files, same hashes)
 - C7 refusal without an answer (Prelint 7): under-tested. `refused-not-asked-again` runs only after `answers: { confirm: 'none' }`. No case drags again after an unanswered question. Proposed: add that case; the direction says unanswered links are not asked again by default.
 - C3 silent limit on dragged blocks (Prelint 3) and C10 calendar data sent to a model (Prelint 10): not benchmark expectations. `score.mjs` has no check for either, and the benchmark should not. They are not closed: C3 is handed to the preview/UI work (the drag limit must be shown, not silent) and C10 to the model-path work in P3/P4 (consent before a real user path sends calendar data to the model; the benchmark uses it only offline). Neither is a P2 item, so no change below covers them; the owner tracks them there.
 - C11 (Prelint 11): already handled. The record says that two of eight seats have voted and does not vote for the others.
+
+## Dispositions of review points not covered by a seat verdict
+
+These points were raised against this record after it was proposed. None of them is a vote, and none is closed by this record; each has an owner and a point at which it must be decided.
+
+- Acceptance check 16 (AskTheW): the repository holds no text or result for a check 16, so this record cannot complete it and does not invent one. Disposition: missing. AskTheW or the owner must supply the full text and result of check 16 and re-run the exact-version checks on the pinned files above. The record holds no go decision until then; the record only says what the evidence shows.
+- Exact-version re-run: `node --test` was re-run on the tree whose `benchmark/` files match the six pinned hashes above; all 43 tests passed (the hash pin test is among them). This verifies the record against the pinned version only; it does not stand in for check 16, which stays missing, so the record holds no release decision.
+- Time zone (Prelint): the benchmark and the planner treat all times as UTC. This is open change 9 (C4). Decision due before the real Google Calendar sync step.
+- Ask-bar correction path (Prelint): the deadline-assumption correction is tested only by calling the planner directly. Decision due when the Ask bar is built (P4 demo at the latest): the bar must send such replies to the planner.
+- Three generic deadline steps (Prelint): open change 10 (C5). Revisit when non-presentation goals are planned.
+- Private result for the live Gemini approach (Prelint): none exists in this tree. No approach is ready for users until the owner records a private-set result for it; this belongs to P3.
+- Consent before calendar data goes to a model (Prelint): the live option has no consent step and sends full event details. It is acceptable only for owner benchmark runs on generated data. Before the live option joins the Ask bar (P4), a consent step must exist and the shared event fields must be chosen.
+- Per-seat reading confirmation and fairness verdict (AskTheW): only Kylon and Claude have confirmed that they read the full benchmark and voted on fairness, each in its own section. AdaL, Prelint, AskTheW, Masky, n8n and Celesto have not; this record does not confirm it for them, and a seat's own section text is the only way to add it.
+- Named verifier (AskTheW): no verifier has reviewed the exact commit and confirmed the acceptance, so this record does not say the acceptance is met. Disposition: missing. A named verifier must review the exact commit and record the result before any approve.
+- C4 to C7 and change 13: disposition is open, supported by Kylon and Claude. C4 is decided before the real Google Calendar sync step, C5 when non-presentation goals are planned, C6, C7 and change 13 in the next owner benchmark change.
+- Empty reply to a non-calendar or vague request (Prelint): not a benchmark expectation; routing belongs to the main Agent. When the Ask bar is built it must show a short line when no plan is found (P4).
+- Prelint, AskTheW, Masky, n8n and Celesto still have `not recorded` verdicts; only each seat can cast its own vote.
+
+## Summary of seat verdicts and changes
+
+One place to read each seat's verdict and the changes wanted. The verdict text itself is in each seat's section above.
+
+| Seat | Verdict | Changes it supports |
+|------|---------|---------------------|
+| Kylon | fair with changes | 1 to 13 (proposer) |
+| Claude | fair with changes | 1 to 13 (1 to 8 confirmed against the source; 9 to 13 re-checked and supported in its own section) |
+| AdaL, Prelint, AskTheW, Masky, n8n, Celesto | not recorded | none recorded; only each seat can vote |
+
+Changes wanted: changes 1 to 8 (F1 to F10) are applied in this tree, except the ignored-once discovery part of F5, which is open as change 13; changes 9 to 12 (C4 to C7) and 13 are open. Changes 1 to 13 are supported by the two seats that voted (Kylon, Claude). Two seats are not seven of eight, so none is agreed by the roundtable (not agreed by the roundtable).
 
 ## Review evidence
 
@@ -98,7 +129,7 @@ What was reviewed and how to re-check it, so a reader without the benchmark in h
 
 ## Proposed changes
 
-Agreement status: changes 1 to 8 are proposed by Kylon and supported by Claude; changes 9 to 12 come from the open Prelint concerns C4 to C7 and are proposed by Kylon only (two of eight seats). AdaL, Prelint, AskTheW, Masky, n8n and Celesto have recorded no vote, so the roundtable has not agreed beyond these two seats. Agreement covers only the seats that voted; it says nothing for the others. Each change carries a status: `applied` once `benchmark/` in the reviewed tree has the change and the hashes above are updated, `open` until then. The owner reports that F1 to F10 are applied in its benchmark (F1 gap-shown, F2 awake-hours with dates, F3 dependents-follow only when needed, F4 collide cases that reach the class, F5 new cases, F6 duplicate weight, F7/F8 runner pass rule and load errors, F9/F10 per-sub-type report and unrelated-move share, plus a fix for clash candidates that did not overlap). The `benchmark/` in this tree is that version (the hashes above pin it), so changes 1 to 8 say `applied` here; changes 9 to 12 are not in the owner's list and stay `open`. Two statuses are checked by `tests/benchmark-review.test.mjs`, which runs the real checks (a 03:00-00:00 block must fail `awake-hours`; a tight case with no note and no question must fail `gap-shown`) and requires F1 and F2 to read `applied` exactly when the benchmark behaves that way. When the fixed benchmark is rebased into this tree, the hashes above and these statuses must be updated together. A seat that disagrees adds its own section above.
+Agreement status: changes 1 to 8 are proposed by Kylon and supported by Claude; changes 9 to 12 come from the open Prelint concerns C4 to C7, and change 13 (the ignored-once part of F5); Kylon proposed these and Claude supports them (two of eight seats). AdaL, Prelint, AskTheW, Masky, n8n and Celesto have recorded no vote, so the roundtable has not agreed beyond these two seats. Agreement covers only the seats that voted; it says nothing for the others. Each change carries a status: `applied` once `benchmark/` in the reviewed tree has the change and the hashes above are updated, `open` until then. The owner reports that F1 to F10 are applied in its benchmark (F1 gap-shown, F2 awake-hours with dates, F3 dependents-follow only when needed, F4 collide cases that reach the class, F5 new cases, F6 duplicate weight, F7/F8 runner pass rule and load errors, F9/F10 per-sub-type report and unrelated-move share, plus a fix for clash candidates that did not overlap). The `benchmark/` in this tree is that version (the hashes above pin it), so changes 1 to 8 say `applied` here; changes 9 to 13 are not in the owner's list and stay `open`. Two statuses are checked by `tests/benchmark-review.test.mjs`, which runs the real checks (a 03:00-00:00 block must fail `awake-hours`; a tight case with no note and no question must fail `gap-shown`) and requires F1 and F2 to read `applied` exactly when the benchmark behaves that way. When the fixed benchmark is rebased into this tree, the hashes above and these statuses must be updated together. A seat that disagrees adds its own section above.
 
 Measured result on the owner's promoted code, which bears on these changes: with the public wording, rules, search and hybrid reach 91 to 100 percent, so the public set no longer separates the approaches. With wording the seats never saw (private), basic arrangement drops to 28 percent and deadline back-planning to 8 to 14 percent. Proposed consequence (not yet agreed by the roundtable): selection between approaches uses the private wording set and the real-model approach, not the public set.
 
@@ -108,17 +139,18 @@ Measured result on the owner's promoted code, which bears on these changes: with
 | 2 | F2 | applied | applied |
 | 3 | F3 | applied | applied |
 | 4 | F4 | applied | applied |
-| 5 | F5 | applied | applied |
+| 5 | F5 | applied, except the ignored-once case (change 13) | applied, without the ignored-once case |
 | 6 | F6 | applied | applied |
 | 7 | F7, F8 | applied | applied |
 | 8 | F9, F10 | applied | applied |
 | 9 to 12 | C4 to C7 | open | not reported |
+| 13 | F5 (ignored-once part) | open | not reported |
 
 1. (F1) Tighten `gap-shown` so a tight case passes only when the plan carries a note or the question; allow zero steps when it does. Status: applied.
 2. (F2) Bracket `awake-hours` as `start >= 07:30 && (end <= 23:30 || end is midnight)` and compare dates, so both start and end are always checked. Status: applied.
 3. (F3) In `known` cases, require `dependents-follow` only when the dependent would otherwise start before the dragged block's new end, or generate gaps that always force a move. Status: applied.
 4. (F4) Generate `collide` cases so the shifted chain reaches the evening class. Status: applied.
-5. (F5) Add cases: an event across midnight, targeted back-to-back events, a deadline today, a request naming a day already passed, and an ignored-once discovery case. Status: applied.
+5. (F5) Add cases: an event across midnight, targeted back-to-back events, a deadline today, and a request naming a day already passed. Status: applied.
 6. (F6) Remove the duplicate `unknown` weight entry or document it. Status: applied.
 7. (F7, F8) Make `run.mjs` use the same pass rule as `report.mjs` and print the import error when an approach cannot load. Status: applied.
 8. (F9, F10) Report pass rates per sub-type and the unrelated-move rate, and give the baseline gain an interval. Status: applied.
@@ -126,3 +158,4 @@ Measured result on the owner's promoted code, which bears on these changes: with
 10. (C5) Add a deadline case with no named day and a case with a non-presentation task; require the step names to fit the task. Status: open.
 11. (C6) Add a drag past the point of no return (the deadline cannot be met) and require a note or a question, as `gap-shown` does. Status: open.
 12. (C7) Add a case that drags again after a question that got no answer and require that the question is not asked again. Status: open.
+13. (F5) Ignored-once part of F5: add a discovery case where the user ignored the prompt once and is offered again later; require that nothing opens automatically. `gen.mjs` has `dismissed` but no ignored-once case. Status: open.

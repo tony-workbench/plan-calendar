@@ -93,14 +93,6 @@ export function parseDeadline(text, nowMs) {
   return { ms: day + hour * H + (+m[2] || 0) * MIN, assumed: false };
 }
 
-export const parseWhen = (request, nowMs) => {
-  const t = request.toLowerCase(), today = dayStart(nowMs), after = t.match(/\bafter\s+(\d{1,2})\s*(am|pm)\b/);
-  if (after) return { from: today, window: [((+after[1] % 12) + (after[2] === 'pm' ? 12 : 0)) * 60, AWAKE_END], limit: today + D };
-  if (/\b(tonight|this evening)\b/.test(t)) return { from: today, window: [1020, AWAKE_END], limit: today + D };
-  if (/\btomorrow\b/.test(t)) return { from: today + D, window: WINDOW, limit: today + 2 * D };
-  return null;
-};
-
 const INTENT = /\b(find|schedule|need to|have to|want to|put|book|block|fit|plan|set aside|make time|when can|can you|help me|remind|hit the|go for|go to|squeeze in|carve out|i'd like to|i would like to|time for)\b/i;
 const DEADLINE = /\b(due|deadline|hand in|work back|submit|finish\b.*\bby|(?:ready|done|complete)\s+by)\b|\bby\s+(?:the\s+\d{1,2}(?:st|nd|rd|th)|end of)\b/i;
 const CUT = /\s+(?:for\s+(?:\d|half|an?\s|one|two|three|four)|tonight|this evening|yesterday|today|tomorrow|after\s|before\s|at\s\d|on\s)|[,?.!]/i;
@@ -112,7 +104,6 @@ function activity(request) {
   return cap((cut > -1 ? m[1].slice(0, cut) : m[1]).trim() || 'task');
 }
 
-export const titleCase = cap;
 function deliverable(request) {
   const m = request.match(/^(.*?)\s+(?:(?:is|are)\s+)?due\b/i) || request.match(/hand in\s+(.+?)\s+(?:today|this|next|on|by)\b/i) || request.match(/\b(?:finish|complete|submit)\s+(.+?)\s+by\b/i) || request.match(/prep(?:aration)? for\s+(.+?)[.?!]?$/i);
   const what = (m ? m[1] : 'your deadline').replace(/^(the|my)\s+/i, '').trim();
@@ -202,9 +193,9 @@ export function discoverResult(ctx) {
   return { blocks, question: { text, items: blocks.map((b) => b.id) }, notes: ['Adding an activity to the calendar does not register or book it for you.'], meta: { kind: 'discover', timezone: TIMEZONE } };
 }
 
-// `intent` may come from a model (see understand-live.mjs); the plan itself is always built here.
-export function planWith(input, solver, intent = understand(input)) {
+export function planWith(input, solver) {
   const ctx = { events: input.events ?? [], now: input.now, context: input.context ?? {} };
+  const intent = understand(input);
   switch (intent.kind) {
     case 'discover': return discoverResult(ctx);
     case 'basic': return basicResult(intent, ctx, solver.finder);

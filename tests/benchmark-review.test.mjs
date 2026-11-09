@@ -167,3 +167,48 @@ test('the record carries its own evidence and says the changes are only proposed
   assert.match(m[1], /seven of eight/i);
   assert.ok(doc.indexOf('## Review evidence') < doc.indexOf('## Proposed changes'));
 });
+
+test('regression: the summary lists every seat verdict and the changes wanted', () => {
+  const m = doc.match(/^## Summary of seat verdicts and changes\n([\s\S]*?)(?=^## )/m);
+  assert.ok(m, 'summary section');
+  for (const seat of ['Kylon', 'Claude']) assert.match(m[1], new RegExp(`^\\| ${seat} \\| fair with changes \\|`, 'm'));
+  for (const seat of ['AdaL', 'Prelint', 'AskTheW', 'Masky', 'n8n', 'Celesto']) assert.ok(m[1].includes(seat), `summary names ${seat}`);
+  assert.match(m[1], /not recorded/);
+  assert.match(m[1], /changes 9 to 12/);
+  assert.match(m[1], /not agreed by the roundtable/);
+});
+
+test('regression: change 5 does not claim an ignored-once discovery case the generator lacks; Claude support is limited to what it reviewed', () => {
+  assert.ok(!subs(/ignored|once|again/i), 'generator has no ignored-once discovery sub-type');
+  const items = doc.match(/^## Proposed changes\n([\s\S]*)$/m)[1].match(/^\d+\. .*$/gm);
+  assert.doesNotMatch(items.find((it) => it.startsWith('5. ')), /ignored-once/);
+  assert.match(items.find((it) => it.startsWith('13. ')), /ignored-once.*Status: open\.$/);
+  const sum = doc.match(/^## Summary of seat verdicts and changes\n([\s\S]*?)(?=^## )/m)[1];
+  assert.doesNotMatch(sum, /^\| Claude \|[^\n]*1 to 12/m);
+  assert.doesNotMatch(sum, /supported by the two seats that voted and are not agreed/);
+});
+
+test('regression: open review points have a recorded disposition and no go decision is claimed', () => {
+  const m = doc.match(/^## Dispositions of review points not covered by a seat verdict\n([\s\S]*?)(?=^## )/m);
+  assert.ok(m, 'dispositions section');
+  for (const re of [/check 16[^\n]*missing/, /Time zone[^\n]*C4/, /Ask-bar correction/, /Three generic deadline steps[^\n]*C5/, /private result[^\n]*Gemini/i, /consent/i]) assert.match(m[1], re);
+  assert.doesNotMatch(doc, /go decision (is|was) recorded|Verdict: go\b/i);
+  assert.ok(doc.indexOf('## Dispositions') < doc.indexOf('## Review evidence'));
+});
+
+test('regression: Claude votes on changes 9 to 13, dispositions cover the AskTheW points, and the agreement text is clean', () => {
+  assert.match(section('Claude'), /My own vote on the open changes 9 to 13/);
+  const status = doc.match(/Agreement status: [^\n]*/)[0];
+  assert.doesNotMatch(status, /\band and\b/);
+  assert.doesNotMatch(status, /changes 9 to 12 are not in the owner/);
+  assert.doesNotMatch(doc, /proposed by Kylon only/);
+  const d = doc.match(/^## Dispositions of review points not covered by a seat verdict\n([\s\S]*?)(?=^## )/m)[1];
+  assert.match(d, /Named verifier[^\n]*missing/);
+  assert.match(d, /reading confirmation/i);
+  assert.match(d, /C4 to C7 and change 13/);
+});
+
+test('change 5 does not claim the ignored-once case as applied or owner-reported', () => {
+  const row = doc.split('\n').find((l) => l.startsWith('| 5 |'));
+  assert.match(row, /without the ignored-once case/);
+});
