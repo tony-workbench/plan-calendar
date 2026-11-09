@@ -46,3 +46,7 @@ With the public wording the offline approaches score 100 percent, so the public 
 - 60 cases per situation, so a rate carries a wide interval (see the owner's brackets).
 - No real person has tried it.
 - The hybrid-live implementation and the private-wording results are not in this tree (`src/planner/approaches/` holds agent, agent-live, hybrid, rules and search; `results/` holds only public offline runs). The hybrid-live figures are the owner's and cannot be checked from here.
+
+## Final tree check
+
+The 97 percent above was measured on commit `5a92e07` of branch `plan/roundtable-20261108`, where `hybrid-live` read the request through `understand-live.mjs`. The branch history lost files when parallel work items overwrote each other, so the final tree was assembled by the owner from several commits and uses the demo's intent reader (`src/planner/approaches/hybrid-live.mjs`, `ask`). The owner ran the same private cases (60 per situation, real Gemini 3.8 Flash) on the final tree: 217 of 240 = 90 percent (basic 90, deadline 72, discovery 100, related 100). Two causes of the gap are known: the model omits the length of a task when the schema allows it (fixed here by falling back to the length in the request), and requests such as "after 8 pm" or an unusual due-date wording are read less well than by the earlier reader. The ranking does not change: the model-reads, code-plans design beats the plain code parser (79 percent) and the model alone (67 percent).

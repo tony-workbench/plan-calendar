@@ -36,24 +36,11 @@ The first build is a local, English-only, offline-testable prototype. Real Googl
 
 ## Where the build stands
 
-Nothing exists yet. The tests in `tests/` will show the state once the first item lands.
+The shared benchmark in `benchmark/` is the owner's: it generates cases for the four situations, checks every plan with named rules (commonsense and hard) and reports pass rates with intervals. The finish line is: the roundtable accepts the benchmark (P2), the best approach is chosen on it and every seat agrees (P3), and an offline demo of the four situations exists (P4).
 
 ## Model and tools
 
-The Calendar Agent calls the Gemini API; the key comes from the environment (`GEMINI_API_KEY`) and is never committed or printed. Offline tests use recorded or fake model replies and must pass without a key.
-
-## Implementation approaches
-
-The Calendar Agent is not fixed to one design. P1 compares these and picks one, or a combination:
-
-| Approach | What it is |
-| --- | --- |
-| Code | A deterministic planner: rules and search decide everything; a model only reads the user's sentence. |
-| Agent | A Gemini tool-calling loop decides the plan and the tool calls; code only checks the result. |
-| Workflow | A fixed chain of steps (understand, find slots, order, check, explain) with a model at chosen steps. |
-| Hybrid | Any mix, for example an agent that proposes and code that verifies and repairs. |
-
-Compare on the same benchmark in `tests/benchmark/`: the four situations with fixed calendars and expected properties. Score each approach on rule satisfaction (no overlap, fixed events never moved, ordered steps before the deadline, links asked at most once), flexibility on phrasings the rules did not foresee, latency, cost per request and how often a plan needs repair. Real-model runs use the owner's Gemini key, which stays on the owner's machine; the owner's coordinator records those scores in a verification record for the seats. Offline tests use recorded model replies.
+The Calendar Agent calls Gemini 3.8 Flash (`gemini-3.8-flash`) through the Gemini API. The model id is read from `GEMINI_MODEL` and defaults to `gemini-3.8-flash`; the key comes from the environment (`GEMINI_API_KEY`) and is never committed or printed. Offline tests use recorded or fake model replies and must pass without a key.
 
 ## Work queue
 
@@ -61,15 +48,11 @@ Take items in order. Coding seats are Claude, AdaL and Kylon's Claude agent; rev
 
 | # | Goal | Acceptance | Who |
 | --- | --- | --- | --- |
-| P1 | Choose the implementation approach | Build the same small planner four ways behind one interface, and compare them on a fixed benchmark of the four situations (see "Implementation approaches"). The seats vote for the best version, with the numbers written in a record; the winner is the base for P3 onward | Coding seats each own one approach; every seat votes |
-| P2 | Preview Calendar | A day and week view showing existing events and local preview blocks, two visually different kinds (fixed existing events and proposed blocks); drag to move a block; undo restores the state before the last change; tests cover drag and undo | Coding seats; AdaL and Masky verify |
-| P3 | Calendar Agent core over MCP | An MCP server exposes tools (read events, find free time, propose blocks); a Calendar Agent loop calls the Gemini API, picks tools and returns blocks; a fake model makes the tests offline; a hand-off function lets the main Agent pass a request and get the plan back | Coding seats; Kylon verifies |
-| P4 | Basic arrangement from Ask | "find time to work out for half an hour" yields one block in a free slot that overlaps nothing and does not move fixed events; the preview shows it with the existing events and nothing is written to Google Calendar | Coding seats; AdaL verifies |
-| P5 | Deadline back-planning | "demo due next Friday" yields ordered steps (outline, production, rehearsal) before the deadline around fixed events; dragging one step re-plans only the later steps; "production needs an hour more" re-plans the remaining work | Coding seats; Kylon verifies |
-| P6 | Related-item adjustment | The five rules above, covered by tests: ask once, merge into one question, partial answers, refusals not re-asked, fixed events never moved, undo of the whole change | Coding seats; AdaL and Masky verify |
-| P7 | Confirm, then sync | A Google Calendar adapter interface with a fake used in tests; confirm writes only the confirmed blocks; abandon writes nothing; real writes need the owner's OAuth and stay off | Coding seats |
-| P8 | Proactive activity discovery | Candidates come from a source interface with a fake; few or none when information is thin; one light prompt; ignoring does not reopen or re-ask; confirming syncs only the chosen item; each candidate shows content, time, place, reason, source | Coding seats; AdaL verifies |
-| P9 | Continuous roundtable | One unattended run completes two of P1–P4 | Claude coordinator |
+| P1 | Four approaches | Build the same small planner four ways behind one interface in `src/planner/` (rules, constraint search, Agent tool loop, hybrid). Each exports `plan` and `replan` as defined in `benchmark/contract.mjs` and runs on the shared benchmark (`node benchmark/run.mjs`, public split). Tests in `tests/`. The code must not contain votes cast for other seats | Coding seats, one approach each; every seat votes on the build |
+| P2 | Review the benchmark | Every seat reads `benchmark/` (generator, checks, runner, report and its README) and votes on whether it measures the four situations fairly. Findings list the changes wanted: missing cases, unfair or wrong checks, wrong expectations. `docs/benchmark-review.md` has one section per seat's verdict and the changes the roundtable agrees on. `benchmark/` is read-only for seats; the owner's agent applies the agreed changes | Coding seats write the record; every seat votes |
+| P3 | Choose the best approach | The owner's agent runs the benchmark (private held-out wording, real Gemini model) on every approach and notes the numbers. `docs/approach-decision.md` names the best approach with the numbers, the gain over the baselines (one-shot model answer, plain code parser) and the reasons, and lists what is not proven. The record contains no votes and no vote placeholders: the seats' vote on the choice is the roundtable's approval vote on this build, shown in the round report | Coding seats write the record from the owner's numbers |
+| P4 | Four-situation demo | From the chosen approach, a demo page (`public/demo.html` served at `/demo` by `node src/demo-server.mjs`; the owner mounts the same handler in `server.mjs` when merging, so seats do not edit or test `server.mjs`) shows all four situations end to end in a week Preview Calendar: basic arrangement, deadline back-planning with dragging, proactive activity discovery, and related-item adjustment with its single question. No real Google Calendar and no app; the model is live when the key is in the environment and recorded replies otherwise. Tests prove each situation runs | Coding seats |
+| P9 | Continuous roundtable | One unattended run completes P1 to P4 | Claude coordinator |
 
 Later, each needing its own decision: real Google Calendar writes, cross-device sync, public deployment.
 
@@ -80,4 +63,4 @@ Later, each needing its own decision: real Google Calendar writes, cross-device 
 - The release rules (kept outside this repo) are unchanged: at least 7 of 8 approvals, private loopback only, at most 2 hours per round, at most 3 revisions. If an item still fails, record why and move to the next item.
 - Non-coding seats review proposals, re-check the promoted build, add tests and update the Prelint ledger.
 - No check may need a real person; a part of an item that does, is the owner's own check.
-- Stop when the queue is empty, the time or round limit is reached, or the owner says stop. Then shut down the n8n checks and the cloud machines so nothing bills idly.
+- Stop when P4 is promoted, the time or round limit is reached, or the owner says stop. Then shut down the n8n checks and the cloud machines so nothing bills idly.
