@@ -15,7 +15,7 @@ export const ms = (v) => Date.parse(v);
 export const dayStart = (t) => Math.floor(t / D) * D;
 export const ceilTo = (t, step = 15 * MIN) => Math.ceil(t / step) * step;
 const minOfDay = (t) => (t - dayStart(t)) / MIN;
-const cap = (s) => s.charAt(0).toUpperCase() + s.slice(1);
+export const cap = (s) => s.charAt(0).toUpperCase() + s.slice(1);
 const dur = (b) => ms(b.end) - ms(b.start);
 const real = (blocks) => blocks.filter((b) => b.kind !== 'candidate');
 
@@ -118,13 +118,16 @@ export function understand({ request = '', now, context = {} }) {
     return dl ? { kind: 'deadline', what, deadline: dl.ms, assumed: dl.assumed } : { kind: 'ask-deadline', what };
   }
   if (!INTENT.test(request)) return { kind: 'none' };
+  return { kind: 'basic', title: activity(request), minutes: parseMinutes(request) ?? 30, pref: timePreference(request, nowMs), past: /\byesterday\b/i.test(request) };
+}
+
+export function timePreference(request, nowMs) {
   const t = request.toLowerCase(), today = dayStart(nowMs);
   const after = t.match(/\bafter\s+(\d{1,2})\s*(am|pm)\b/);
-  let pref = null;
-  if (after) pref = { from: today, window: [((+after[1] % 12) + (after[2] === 'pm' ? 12 : 0)) * 60, AWAKE_END], limit: today + D };
-  else if (/\b(tonight|this evening)\b/.test(t)) pref = { from: today, window: [1020, AWAKE_END], limit: today + D };
-  else if (/\btomorrow\b/.test(t)) pref = { from: today + D, window: WINDOW, limit: today + 2 * D };
-  return { kind: 'basic', title: activity(request), minutes: parseMinutes(request) ?? 30, pref, past: /\byesterday\b/.test(t) };
+  if (after) return { from: today, window: [((+after[1] % 12) + (after[2] === 'pm' ? 12 : 0)) * 60, AWAKE_END], limit: today + D };
+  if (/\b(tonight|this evening)\b/.test(t)) return { from: today, window: [1020, AWAKE_END], limit: today + D };
+  if (/\btomorrow\b/.test(t)) return { from: today + D, window: WINDOW, limit: today + 2 * D };
+  return null;
 }
 
 // ---- result builders ----
@@ -193,9 +196,8 @@ export function discoverResult(ctx) {
   return { blocks, question: { text, items: blocks.map((b) => b.id) }, notes: ['Adding an activity to the calendar does not register or book it for you.'], meta: { kind: 'discover', timezone: TIMEZONE } };
 }
 
-export function planWith(input, solver) {
+export function planWith(input, solver, intent = understand(input)) {
   const ctx = { events: input.events ?? [], now: input.now, context: input.context ?? {} };
-  const intent = understand(input);
   switch (intent.kind) {
     case 'discover': return discoverResult(ctx);
     case 'basic': return basicResult(intent, ctx, solver.finder);
@@ -293,8 +295,7 @@ export function replanRelated(plan, change, events, answers) {
       out.set(id, { ...b, start: iso(s), end: iso(s + length), moved: true });
       prevEnd = s + length;
     }
-    const left = pend.items.filter((id) => !ok.includes(id));
-    return { blocks: blocks.map((b) => out.get(b.id)), notes: [], meta: { ...plan.meta, pending: undefined, ...(left.length ? { declined: [...new Set([...declined, ...left])] } : {}) } };
+    return { blocks: blocks.map((b) => out.get(b.id)), notes: [], meta: { ...plan.meta, pending: undefined } };
   }
   const me = change.type === 'drag' ? find(change.blockId) : null;
   if (!me) return { ...base, notes: ['That item is not part of this plan.'], meta: plan.meta };

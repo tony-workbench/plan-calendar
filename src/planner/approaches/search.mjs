@@ -43,6 +43,6 @@ function steps(intent, ctx) {
 }
 
 const solver = { finder, steps };
-export const plan = async (input) => planWith(input, solver);
+export const plan = async (input, intent) => planWith(input, solver, intent);
 export const replan = async (input) => replanWith(input, solver);
 export default { plan, replan };
