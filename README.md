@@ -13,6 +13,12 @@ This repository is built by an AI roundtable; see `docs/PRODUCT-DIRECTION.md` fo
 1. `npm start`
 2. Open http://127.0.0.1:3000
 
+## Four-situation demo
+
+- Visual page: `node src/demo-server.mjs`, then open http://127.0.0.1:3001/demo (the default port is 3001; set `PORT` to change it). It uses recorded model replies, or the live model when `GEMINI_API_KEY` is set; with a key, the request text is sent to the model. Nothing is written to Google Calendar.
+- Terminal script: `node src/demo.mjs`
+- `handleDemo` in `src/demo-api.mjs` is the handler for `/demo`, `/demo.js` and `/api/*`. `server.mjs` (`npm start`, port 3000) does not mount it yet. The one-line change (`if (await handleDemo(req, res)) return;` at the top of its request handler) was not made because this round's task rules forbid editing `server.mjs`; until the owner adds it, `/demo` is served only by `node src/demo-server.mjs` on port 3001.
+
 ## Test it
 
 `npm test`

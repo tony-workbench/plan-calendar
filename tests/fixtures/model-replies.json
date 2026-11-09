@@ -1,0 +1,5 @@
+{
+  "find time to work out for half an hour": { "kind": "basic", "title": "Work out", "minutes": 30 },
+  "the demo is due next friday, help me plan the prep": { "kind": "deadline", "what": "The demo" },
+  "anything fun this week?": { "kind": "discover" }
+}
