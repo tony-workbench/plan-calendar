@@ -36,7 +36,7 @@ The first build is a local, English-only, offline-testable prototype. Real Googl
 
 ## Where the build stands
 
-Nothing exists yet. The tests in `tests/` will show the state once the first item lands.
+The shared benchmark in `benchmark/` is the owner's: it generates cases for the four situations, checks every plan with named rules (commonsense and hard) and reports pass rates with intervals. The finish line is: the roundtable accepts the benchmark (P2), the best approach is chosen on it and every seat agrees (P3), and an offline demo of the four situations exists (P4).
 
 ## Model and tools
 
@@ -48,15 +48,11 @@ Take items in order. Coding seats are Claude, AdaL and Kylon's Claude agent; rev
 
 | # | Goal | Acceptance | Who |
 | --- | --- | --- | --- |
-| P1 | Choose the implementation approach | Build the same small planner four ways behind one interface, and compare them on a fixed benchmark of the four situations (see "Implementation approaches"). The record in `docs/` lists each approach's benchmark numbers and names a recommended base planner with reasons, labelled as a recommendation. The code must not contain votes cast for other seats: the roundtable's approval vote on this build is the seats' vote, and the owner's coordinator adds the real-model scores to the verification record. Once promoted, the recommended planner is the base for P3 onward | Coding seats each own one approach; every seat votes on the build |
-| P2 | Preview Calendar | A day and week view showing existing events and local preview blocks, two visually different kinds (fixed existing events and proposed blocks); drag to move a block; undo restores the state before the last change; tests cover drag and undo | Coding seats; AdaL and Masky verify |
-| P3 | Calendar Agent core over MCP | An MCP server exposes tools (read events, find free time, propose blocks); a Calendar Agent loop calls the Gemini API, picks tools and returns blocks; a fake model makes the tests offline; a hand-off function lets the main Agent pass a request and get the plan back | Coding seats; Kylon verifies |
-| P4 | Basic arrangement from Ask | "find time to work out for half an hour" yields one block in a free slot that overlaps nothing and does not move fixed events; the preview shows it with the existing events and nothing is written to Google Calendar | Coding seats; AdaL verifies |
-| P5 | Deadline back-planning | "demo due next Friday" yields ordered steps (outline, production, rehearsal) before the deadline around fixed events; dragging one step re-plans only the later steps; "production needs an hour more" re-plans the remaining work | Coding seats; Kylon verifies |
-| P6 | Related-item adjustment | The five rules above, covered by tests: ask once, merge into one question, partial answers, refusals not re-asked, fixed events never moved, undo of the whole change | Coding seats; AdaL and Masky verify |
-| P7 | Confirm, then sync | A Google Calendar adapter interface with a fake used in tests; confirm writes only the confirmed blocks; abandon writes nothing; real writes need the owner's OAuth and stay off | Coding seats |
-| P8 | Proactive activity discovery | Candidates come from a source interface with a fake; few or none when information is thin; one light prompt; ignoring does not reopen or re-ask; confirming syncs only the chosen item; each candidate shows content, time, place, reason, source | Coding seats; AdaL verifies |
-| P9 | Continuous roundtable | One unattended run completes two of P1–P4 | Claude coordinator |
+| P1 | Four approaches | Build the same small planner four ways behind one interface in `src/planner/` (rules, constraint search, Agent tool loop, hybrid). Each exports `plan` and `replan` as defined in `benchmark/contract.mjs` and runs on the shared benchmark (`node benchmark/run.mjs`, public split). Tests in `tests/`. The code must not contain votes cast for other seats | Coding seats, one approach each; every seat votes on the build |
+| P2 | Review the benchmark | Every seat reads `benchmark/` (generator, checks, runner, report and its README) and votes on whether it measures the four situations fairly. Findings list the changes wanted: missing cases, unfair or wrong checks, wrong expectations. `docs/benchmark-review.md` has one section per seat's verdict and the changes the roundtable agrees on. `benchmark/` is read-only for seats; the owner's agent applies the agreed changes | Every seat; a coding seat writes the record |
+| P3 | Choose the best approach | The owner's agent runs the benchmark (public and hidden cases, real Gemini model) on every approach and notes the numbers. `docs/approach-decision.md` names the best approach with the numbers, the gain over the baselines (one-shot model answer, plain first-free-slot calendar) and the reasons. Every seat votes on the choice | Owner's agent runs; every seat votes |
+| P4 | Four-situation demo | From the chosen approach, an offline demo (one static page or script; no real Google Calendar, no app) shows all four situations end to end: basic arrangement, deadline back-planning with dragging, proactive activity discovery, and related-item adjustment with its single question. Tests prove each situation runs | Coding seats |
+| P9 | Continuous roundtable | One unattended run completes P1 to P4 | Claude coordinator |
 
 Later, each needing its own decision: real Google Calendar writes, cross-device sync, public deployment.
 
@@ -67,4 +63,4 @@ Later, each needing its own decision: real Google Calendar writes, cross-device 
 - The release rules (kept outside this repo) are unchanged: at least 7 of 8 approvals, private loopback only, at most 2 hours per round, at most 3 revisions. If an item still fails, record why and move to the next item.
 - Non-coding seats review proposals, re-check the promoted build, add tests and update the Prelint ledger.
 - No check may need a real person; a part of an item that does, is the owner's own check.
-- Stop when the queue is empty, the time or round limit is reached, or the owner says stop. Then shut down the n8n checks and the cloud machines so nothing bills idly.
+- Stop when P4 is promoted, the time or round limit is reached, or the owner says stop. Then shut down the n8n checks and the cloud machines so nothing bills idly.
