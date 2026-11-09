@@ -40,20 +40,7 @@ Nothing exists yet. The tests in `tests/` will show the state once the first ite
 
 ## Model and tools
 
-The Calendar Agent calls the Gemini API; the key comes from the environment (`GEMINI_API_KEY`) and is never committed or printed. Offline tests use recorded or fake model replies and must pass without a key.
-
-## Implementation approaches
-
-The Calendar Agent is not fixed to one design. P1 compares these and picks one, or a combination:
-
-| Approach | What it is |
-| --- | --- |
-| Code | A deterministic planner: rules and search decide everything; a model only reads the user's sentence. |
-| Agent | A Gemini tool-calling loop decides the plan and the tool calls; code only checks the result. |
-| Workflow | A fixed chain of steps (understand, find slots, order, check, explain) with a model at chosen steps. |
-| Hybrid | Any mix, for example an agent that proposes and code that verifies and repairs. |
-
-Compare on the same benchmark in `tests/benchmark/`: the four situations with fixed calendars and expected properties. Score each approach on rule satisfaction (no overlap, fixed events never moved, ordered steps before the deadline, links asked at most once), flexibility on phrasings the rules did not foresee, latency, cost per request and how often a plan needs repair. Real-model runs use the owner's Gemini key, which stays on the owner's machine; the owner's coordinator records those scores in a verification record for the seats. Offline tests use recorded model replies.
+The Calendar Agent calls Gemini 3.8 Flash (`gemini-3.8-flash`) through the Gemini API. The model id is read from `GEMINI_MODEL` and defaults to `gemini-3.8-flash`; the key comes from the environment (`GEMINI_API_KEY`) and is never committed or printed. Offline tests use recorded or fake model replies and must pass without a key.
 
 ## Work queue
 
