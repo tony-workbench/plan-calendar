@@ -9,7 +9,7 @@ export const NOW = '2026-11-09T09:00:00.000Z'; // a Monday
 const at = (day, hh, mm = 0) => new Date(Date.UTC(2026, 10, 9 + day, hh, mm)).toISOString();
 const ev = (id, title, day, h1, h2) => ({ id, title, start: at(day, h1), end: at(day, h2) });
 
-const EVENTS = [
+export const EVENTS = [
   ev('e1', 'Team sync', 0, 10, 11),
   ev('e2', 'Client call', 1, 14, 15),
   ev('e3', 'Design review', 3, 10, 12),
