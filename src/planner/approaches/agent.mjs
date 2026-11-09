@@ -1,6 +1,7 @@
 // Approach 3: an Agent tool loop. A model chooses one tool call per turn; the loop runs the tool and feeds the result back.
-// The default model is a scripted offline policy, so nothing leaves the device. A live model can be passed to
-// createAgent({ model }); this repository contains no network code, so sending data to one is always the caller's explicit choice.
+// The default model is a scripted offline policy, so this file sends nothing anywhere. A live model can be passed to createAgent({ model }):
+// src/planner/gemini.mjs and approaches/agent-live.mjs do that, and then the request, schedule and free windows go to the Gemini API.
+// That happens only when the caller asks for it and GEMINI_API_KEY is set; offline tests use fake replies.
 import { understand, basicResult, deadlineResult, discoverResult, replanWith, greedyFinder, STEP_VARIANTS, ceilTo, ms, iso, MIN, WINDOW } from '../core.mjs';
 import { validatePlan } from '../../../benchmark/contract.mjs';
 
@@ -18,6 +19,7 @@ function tools(task) {
     apply_change: () => replanWith(task.input, { finder }),
     check_plan: ({ result }) => validatePlan(result, { events, deadline: result.meta?.deadline }).violations,
     submit: ({ result }) => { task.result = result; return 'ok'; },
+    reject: ({ problem }) => ({ problem }),
   };
 }
 
