@@ -28,6 +28,13 @@
   .block.dragging { opacity:.8; cursor:grabbing; z-index:5; }
   .tag { display:inline-block; font-size:10px; margin-left:4px; padding:0 4px; border-radius:3px; background:rgba(255,255,255,.25); }
   .block[data-kind="proposed"] .tag { background:#fff; color:var(--prop); }
+  #ask-form { padding:8px 16px; display:flex; gap:8px; }
+  #ask-input { flex:1; max-width:28rem; font:inherit; padding:6px 8px; border:1px solid var(--line); border-radius:6px; }
+  #ask-status { padding:0 16px; color:var(--muted); font-size:12px; margin:0; }
+  #preview { padding:8px 16px; }
+  #preview ul { list-style:none; padding:0; }
+  #preview li { padding:.25rem 0; }
+  #preview .proposed { color:#0a5; font-weight:600; }
 </style>
 </head>
 <body>
@@ -42,6 +49,12 @@
   <button id="btn-undo" type="button" disabled>Undo</button>
 </header>
 <div id="legend">Solid locked blocks are existing events. Dashed blocks are proposed and can be dragged. Nothing is saved to Google Calendar.</div>
+<form id="ask-form">
+<input id="ask-input" type="text" size="44" placeholder="find time to work out for half an hour" aria-label="Ask">
+<button type="submit">Ask</button>
+</form>
+<p id="ask-status">Preview only. Nothing is written to Google Calendar.</p>
+<div id="preview"><p>The Preview Calendar will appear here.</p></div>
 <div id="cal"></div>
 <script>
 (function () {
@@ -233,7 +246,7 @@
     }
   }
 
-  window.previewCalendar = { getState: getState, moveBlock: moveBlock, undo: undo, setView: setView };
+  if (typeof window !== 'undefined') window.previewCalendar = { getState: getState, moveBlock: moveBlock, undo: undo, setView: setView };
 
   if (typeof document !== 'undefined' && document.getElementById) {
     document.getElementById('btn-day').addEventListener('click', function () { setView('day'); });
@@ -247,6 +260,186 @@
     render();
   }
 })();
+
+// Inlined copies of src/arrange/parse.mjs, src/arrange/arrange.mjs and src/preview/preview.mjs
+// (the server serves only this page); tests/page.test.mjs keeps them identical.
+// Pure, offline request parser for the Ask bar. No calendar or network access.
+
+const DEFAULT_DURATION_MIN = 30;
+
+const ACTIVITIES = [
+  { activity: 'workout', title: 'Workout', pattern: /\b(work\s*out|workout|exercise|gym)\b/ },
+];
+
+const WORD_NUMBERS = { a: 1, an: 1, one: 1, two: 2, three: 3, four: 4 };
+
+function parseDuration(text) {
+  if (/\bhalf (an )?hour\b|\bhalf-hour\b/.test(text)) return 30;
+  if (/\b(an|one|1) hour and a half\b/.test(text)) return 90;
+  const hours = text.match(/\b(\d+(?:\.\d+)?|a|an|one|two|three|four)\s*(?:hours?|hrs?|h)\b/);
+  if (hours) {
+    const n = WORD_NUMBERS[hours[1]] ?? Number(hours[1]);
+    return Math.round(n * 60);
+  }
+  const mins = text.match(/\b(\d+)\s*(?:minutes?|mins?|m)\b/);
+  if (mins) return Number(mins[1]);
+  return null;
+}
+
+function parseRequest(text, { now } = {}) {
+  const t = String(text ?? '')
+    .toLowerCase()
+    .replace(/[^a-z0-9.\s]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+  const match = ACTIVITIES.find((a) => a.pattern.test(t));
+  if (!match) return { kind: 'unsupported' };
+  const durationMin = parseDuration(t);
+  return {
+    kind: 'basic-arrangement',
+    activity: match.activity,
+    title: match.title,
+    durationMin: durationMin && durationMin > 0 ? durationMin : DEFAULT_DURATION_MIN,
+  };
+}
+// Basic arrangement: place one block in the earliest free slot. Pure and deterministic; no calendar adapter.
+// Working hours are read in UTC so the result does not depend on the machine's time zone.
+const MIN = 60000, DAY = 86400000, GRID = 5 * MIN, BUFFER = 10 * MIN;
+
+// Timestamps without a zone ("2026-11-09T09:00:00") are read as UTC, never machine-local time.
+const NO_ZONE = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(:\d{2}(\.\d+)?)?$/;
+const toMs = (v) => {
+  const ms = typeof v === 'number' ? v : v instanceof Date ? v.getTime() : Date.parse(typeof v === 'string' && NO_ZONE.test(v.trim()) ? `${v.trim()}Z` : v);
+  return Number.isFinite(ms) ? ms : NaN;
+};
+const clock = (s, fallback) => {
+  const m = /^(\d{1,2}):(\d{2})$/.exec(String(s ?? fallback));
+  const [h, mi] = m ? [Number(m[1]), Number(m[2])] : clock(fallback, fallback);
+  return (h * 60 + mi) * MIN;
+};
+const ceilGrid = (ms) => Math.ceil(ms / GRID) * GRID;
+
+function arrange({ intent, events = [], now, windowDays = 7, dayStart = '09:00', dayEnd = '18:00' } = {}) {
+  const title = String(intent?.title ?? 'Block');
+  const durationMin = Number(intent?.durationMin ?? 30);
+  if (!(durationMin > 0)) throw new TypeError('intent.durationMin must be positive');
+  const nowMs = toMs(now);
+  if (!Number.isFinite(nowMs)) throw new TypeError('now must be a valid time');
+  const copy = JSON.parse(JSON.stringify(events));
+  const notes = [];
+  const busy = [];
+  for (const ev of copy) {
+    const s = toMs(ev?.start), e = toMs(ev?.end);
+    if (Number.isFinite(s) && Number.isFinite(e) && e > s) busy.push([s, e]);
+    else notes.push(`Ignored event ${ev?.id ?? '?'} with an invalid time range.`);
+  }
+  busy.sort((a, b) => a[0] - b[0] || a[1] - b[1]);
+
+  const len = durationMin * MIN;
+  const open = clock(dayStart, '09:00'), close = clock(dayEnd, '18:00');
+  const firstDay = Math.floor(nowMs / DAY) * DAY;
+  let found = null;
+  for (let d = 0; d < windowDays && !found; d++) {
+    const base = firstDay + d * DAY;
+    const lo = base + open, hi = base + close;
+    // Candidate starts: the opening of the window, plus the end of every event (with buffer).
+    const starts = new Set([Math.max(lo, ceilGrid(nowMs))]);
+    for (const [, e] of busy) starts.add(ceilGrid(e + BUFFER));
+    for (const s of [...starts].sort((a, b) => a - b)) {
+      if (s < lo || s < nowMs || s + len > hi) continue;
+      // Keep a buffer on both sides of every event; this also rules out any overlap.
+      if (busy.some(([bs, be]) => s < be + BUFFER && s + len > bs - BUFFER)) continue;
+      found = s;
+      break;
+    }
+  }
+  if (found === null) {
+    notes.push(`No free ${durationMin}-minute slot in the next ${windowDays} days within working hours.`);
+    return { blocks: [], events: copy, notes };
+  }
+  const start = new Date(found).toISOString(), end = new Date(found + len).toISOString();
+  notes.push(`Placed "${title}" at the earliest free slot with a ${BUFFER / MIN}-minute buffer.`);
+  return { blocks: [{ id: `block-${start}`, title, start, end, kind: 'proposed' }], events: copy, notes };
+}
+const esc = (s) =>
+  String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
+
+const toItem = (e, source) => ({
+  id: String(e.id),
+  title: e.title ?? e.summary ?? '',
+  start: e.start,
+  end: e.end,
+  source,
+  fixed: source === 'existing' ? e.fixed !== false : Boolean(e.fixed),
+});
+
+function buildPreview({ events = [], blocks = [] } = {}) {
+  const seen = new Set();
+  const items = [];
+  for (const [list, source] of [[events, 'existing'], [blocks, 'proposed']]) {
+    for (const e of list) {
+      const item = toItem(e, source);
+      if (seen.has(item.id)) continue;
+      seen.add(item.id);
+      items.push(item);
+    }
+  }
+  const ms = (v) => { const t = Date.parse(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(:\d{2}(\.\d+)?)?$/.test(String(v)) ? `${v}Z` : v); return Number.isFinite(t) ? t : 0; };
+  items.sort((a, b) => ms(a.start) - ms(b.start) || ms(a.end) - ms(b.end) || a.id.localeCompare(b.id));
+  const byDate = new Map();
+  for (const it of items) {
+    const date = String(it.start).slice(0, 10);
+    if (!byDate.has(date)) byDate.set(date, []);
+    byDate.get(date).push(it);
+  }
+  const days = [...byDate].map(([date, its]) => ({ date, items: its }));
+  return { items, days };
+}
+
+function renderPreviewHtml(preview) {
+  const days = (preview?.days ?? [])
+    .map((d) => {
+      const rows = d.items
+        .map(
+          (i) =>
+            `<li class="${esc(i.source)}" data-id="${esc(i.id)}">${esc(i.start)} – ${esc(i.end)} ${esc(i.title)}` +
+            `${i.source === 'proposed' ? ' (proposed)' : ''}${i.fixed ? ' [fixed]' : ''}</li>`,
+        )
+        .join('');
+      return `<section class="day"><h3>${esc(d.date)}</h3><ul>${rows}</ul></section>`;
+    })
+    .join('');
+  return `<div class="preview-calendar">${days}</div>`;
+}
+function handleAskLocal({ text, events, now }) {
+  const intent = parseRequest(text, { now });
+  if (intent.kind === 'unsupported') {
+    return { preview: buildPreview({ events }), status: 'unsupported', notes: ['This request is not a calendar task I can arrange yet.'] };
+  }
+  const plan = arrange({ intent, events, now });
+  return { preview: buildPreview({ events: plan.events, blocks: plan.blocks }), status: 'preview-only', notes: plan.notes };
+}
+function demoEvents(now) {
+  const day = new Date(Math.floor(now.getTime() / 86400000) * 86400000);
+  const at = (h, m) => new Date(day.getTime() + (h * 60 + m) * 60000).toISOString();
+  return [
+    { id: 'demo-standup', title: 'Standup', start: at(9, 0), end: at(9, 30), fixed: true },
+    { id: 'demo-lunch', title: 'Lunch', start: at(12, 0), end: at(13, 0), fixed: true },
+  ];
+}
+if (typeof document !== 'undefined' && document.getElementById && document.getElementById('ask-form')) {
+  const events = demoEvents(new Date());
+  const show = (res) => {
+    document.getElementById('preview').innerHTML = renderPreviewHtml(res.preview);
+    document.getElementById('ask-status').textContent =
+      res.status === 'unsupported' ? res.notes[0] : 'Preview only. Nothing is written to Google Calendar.';
+  };
+  show({ preview: buildPreview({ events }), status: 'preview-only', notes: [] });
+  document.getElementById('ask-form').addEventListener('submit', (ev) => {
+    ev.preventDefault();
+    show(handleAskLocal({ text: document.getElementById('ask-input').value, events, now: new Date() }));
+  });
+}
 </script>
 </body>
 </html>
