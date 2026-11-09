@@ -1,6 +1,0 @@
-{
-  "find time to work out for half an hour": { "kind": "basic", "title": "Work out", "minutes": 30 },
-  "the demo is due next friday, help me plan the prep": { "kind": "deadline", "what": "Demo" },
-  "anything fun this week?": { "kind": "discover" },
-  "what is the capital of france?": { "kind": "none" }
-}

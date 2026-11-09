@@ -276,7 +276,8 @@ export function replanDeadline(plan, change, events, finder = greedyFinder) {
 const join = (xs) => xs.length < 2 ? xs.join('') : `${xs.slice(0, -1).join(', ')} and ${xs.at(-1)}`;
 
 export function replanRelated(plan, change, events, answers) {
-  const base = clean(plan), blocks = base.blocks, pend = plan.meta?.pending, declined = plan.meta?.declined ?? [];
+  const base = clean(plan), blocks = base.blocks, pend = plan.meta?.pending;
+  let declined = plan.meta?.declined ?? [];
   const find = (id) => blocks.find((b) => b.id === id);
   if (!change) {
     if (!pend) return { ...base, notes: plan.notes ?? [], meta: plan.meta };
@@ -293,19 +294,21 @@ export function replanRelated(plan, change, events, answers) {
       out.set(id, { ...b, start: iso(s), end: iso(s + length), moved: true });
       prevEnd = s + length;
     }
-    return { blocks: blocks.map((b) => out.get(b.id)), notes: [], meta: { ...plan.meta, pending: undefined } };
+    const skipped = pend.items.filter((id) => !ok.includes(id));
+    return { blocks: blocks.map((b) => out.get(b.id)), notes: [], meta: { ...plan.meta, pending: undefined, ...(skipped.length ? { declined: [...new Set([...declined, ...skipped])] } : {}) } };
   }
+  if (pend) declined = [...new Set([...declined, pend.blockId, ...pend.items])];
   const me = change.type === 'drag' ? find(change.blockId) : null;
   if (!me) return { ...base, notes: ['That item is not part of this plan.'], meta: plan.meta };
   const moved = blocks.map((b) => b.id === me.id ? { ...b, start: change.start, end: iso(ms(change.start) + dur(b)) } : b);
   const chain = followers(blocks, me.id);
   if (chain.length) return { blocks: cascade(moved, [me.id, ...chain], { events, meals: false }).blocks, notes: [], meta: { ...plan.meta, pending: undefined } };
   const group = me.group ? blocks.filter((b) => b.group === me.group && b.id !== me.id) : [];
-  if (!group.length || group.every((b) => declined.includes(b.id))) return { blocks: moved, notes: [], meta: { ...plan.meta, pending: undefined } };
+  if (!group.length || group.every((b) => declined.includes(b.id))) return { blocks: moved, notes: [], meta: { ...plan.meta, pending: undefined, declined } };
   const items = [me.id, ...group.map((b) => b.id)].sort((a, b) => ms(find(a).start) - ms(find(b).start));
   const text = `${join(items.map((id) => find(id).title))} may be part of the same plan. Adjust them together?`;
   const pending = { blockId: me.id, delta: ms(change.start) - ms(me.start), items: items.filter((id) => id !== me.id) };
-  return { blocks: moved, question: { text, items }, notes: [], meta: { ...plan.meta, pending } };
+  return { blocks: moved, question: { text, items }, notes: [], meta: { ...plan.meta, pending, declined } };
 }
 
 export function replanWith(input, solver) {
