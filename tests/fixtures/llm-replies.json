@@ -1,0 +1,74 @@
+{
+  "plan|Find time to work out for half an hour": {
+    "blocks": [
+      { "id": "block-1", "title": "Work out", "start": "2026-11-09T08:00:00.000Z", "end": "2026-11-09T08:30:00.000Z" }
+    ],
+    "notes": []
+  },
+  "plan|The demo is due next Friday, plan the prep": {
+    "deadline": "2026-11-20T00:00:00.000Z",
+    "blocks": [
+      { "id": "demo-outline", "title": "Demo outline", "start": "2026-11-16T10:00:00.000Z", "end": "2026-11-16T11:00:00.000Z", "step": 1 },
+      { "id": "demo-production", "title": "Demo production", "start": "2026-11-17T10:00:00.000Z", "end": "2026-11-17T12:00:00.000Z", "step": 2, "dependsOn": ["demo-outline"] },
+      { "id": "demo-rehearsal", "title": "Demo rehearsal", "start": "2026-11-19T14:00:00.000Z", "end": "2026-11-19T15:00:00.000Z", "step": 3, "dependsOn": ["demo-production"] }
+    ],
+    "notes": []
+  },
+  "replan|{\"type\":\"drag\",\"blockId\":\"demo-outline\",\"start\":\"2026-11-17T10:30:00.000Z\"}|null|fresh": {
+    "blocks": [
+      { "id": "demo-outline", "title": "Demo outline", "start": "2026-11-17T10:30:00.000Z", "end": "2026-11-17T11:30:00.000Z", "step": 1 },
+      { "id": "demo-production", "title": "Demo production", "start": "2026-11-17T12:00:00.000Z", "end": "2026-11-17T14:00:00.000Z", "step": 2, "dependsOn": ["demo-outline"], "moved": true },
+      { "id": "demo-rehearsal", "title": "Demo rehearsal", "start": "2026-11-19T14:00:00.000Z", "end": "2026-11-19T15:00:00.000Z", "step": 3, "dependsOn": ["demo-production"] }
+    ],
+    "notes": ["later steps moved after the drag"]
+  },
+  "replan|{\"type\":\"more-time\",\"blockId\":\"demo-production\",\"minutes\":60}|null|fresh": {
+    "blocks": [
+      { "id": "demo-outline", "title": "Demo outline", "start": "2026-11-16T10:00:00.000Z", "end": "2026-11-16T11:00:00.000Z", "step": 1 },
+      { "id": "demo-production", "title": "Demo production", "start": "2026-11-17T10:00:00.000Z", "end": "2026-11-17T13:00:00.000Z", "step": 2, "dependsOn": ["demo-outline"] },
+      { "id": "demo-rehearsal", "title": "Demo rehearsal", "start": "2026-11-19T14:00:00.000Z", "end": "2026-11-19T15:00:00.000Z", "step": 3, "dependsOn": ["demo-production"] }
+    ],
+    "notes": ["production now has three hours"]
+  },
+  "discover|run,talk": {
+    "pick": ["run", "talk"],
+    "question": "Two activities fit you this week, want to see them?"
+  },
+  "replan|{\"type\":\"drag\",\"blockId\":\"cook\",\"start\":\"2026-11-10T13:00:00.000Z\"}|null|fresh": {
+    "blocks": [
+      { "id": "shop", "title": "Shopping", "group": "meal", "start": "2026-11-10T09:00:00.000Z", "end": "2026-11-10T10:00:00.000Z" },
+      { "id": "groceries", "title": "Groceries for tomorrow", "group": "other", "start": "2026-11-10T11:00:00.000Z", "end": "2026-11-10T11:30:00.000Z" },
+      { "id": "cook", "title": "Cooking", "group": "meal", "start": "2026-11-10T13:00:00.000Z", "end": "2026-11-10T14:00:00.000Z" },
+      { "id": "dinner", "title": "Dinner", "group": "meal", "start": "2026-11-10T15:00:00.000Z", "end": "2026-11-10T16:00:00.000Z" }
+    ],
+    "notes": [],
+    "question": "Shopping, Cooking and Dinner look related, adjust them together?"
+  },
+  "replan|{\"type\":\"drag\",\"blockId\":\"cook\",\"start\":\"2026-11-10T13:00:00.000Z\"}|null|asked": {
+    "blocks": [
+      { "id": "shop", "title": "Shopping", "group": "meal", "start": "2026-11-10T09:00:00.000Z", "end": "2026-11-10T10:00:00.000Z" },
+      { "id": "groceries", "title": "Groceries for tomorrow", "group": "other", "start": "2026-11-10T11:00:00.000Z", "end": "2026-11-10T11:30:00.000Z" },
+      { "id": "cook", "title": "Cooking", "group": "meal", "start": "2026-11-10T13:00:00.000Z", "end": "2026-11-10T14:00:00.000Z" },
+      { "id": "dinner", "title": "Dinner", "group": "meal", "start": "2026-11-10T15:00:00.000Z", "end": "2026-11-10T16:00:00.000Z" }
+    ],
+    "notes": ["already asked; not asking again"]
+  },
+  "replan|{\"type\":\"drag\",\"blockId\":\"cook\",\"start\":\"2026-11-10T15:00:00.000Z\"}|{\"confirm\":[\"dinner\"]}|asked": {
+    "blocks": [
+      { "id": "shop", "title": "Shopping", "group": "meal", "start": "2026-11-10T09:00:00.000Z", "end": "2026-11-10T10:00:00.000Z" },
+      { "id": "groceries", "title": "Groceries for tomorrow", "group": "other", "start": "2026-11-10T11:00:00.000Z", "end": "2026-11-10T11:30:00.000Z" },
+      { "id": "cook", "title": "Cooking", "group": "meal", "start": "2026-11-10T15:00:00.000Z", "end": "2026-11-10T16:00:00.000Z" },
+      { "id": "dinner", "title": "Dinner", "group": "meal", "start": "2026-11-10T16:00:00.000Z", "end": "2026-11-10T17:00:00.000Z", "moved": true }
+    ],
+    "notes": ["dinner moved with cooking"]
+  },
+  "replan|{\"type\":\"drag\",\"blockId\":\"cook\",\"start\":\"2026-11-10T14:00:00.000Z\"}|null|fresh": {
+    "blocks": [
+      { "id": "shop", "title": "Shopping", "group": "meal", "start": "2026-11-10T09:00:00.000Z", "end": "2026-11-10T10:00:00.000Z" },
+      { "id": "groceries", "title": "Groceries for tomorrow", "group": "other", "start": "2026-11-10T11:00:00.000Z", "end": "2026-11-10T11:30:00.000Z" },
+      { "id": "cook", "title": "Cooking", "group": "meal", "start": "2026-11-10T14:00:00.000Z", "end": "2026-11-10T15:00:00.000Z" },
+      { "id": "dinner", "title": "Dinner", "group": "meal", "start": "2026-11-10T16:00:00.000Z", "end": "2026-11-10T17:00:00.000Z" }
+    ],
+    "notes": []
+  }
+}
