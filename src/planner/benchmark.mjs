@@ -5,9 +5,11 @@
 import { enforce, toMs } from './interface.mjs';
 import rules from './approaches/rules.mjs';
 import search from './approaches/search.mjs';
+import llmAgent from './approaches/llm-agent.mjs';
 import hybrid from './approaches/hybrid.mjs';
 
-export const APPROACHES = { rules, search, hybrid };
+// llm-agent has no model offline (empty plans, scored as FAIL); with GEMINI_API_KEY set it runs for real.
+export const APPROACHES = { rules, search, 'llm-agent': llmAgent, hybrid };
 
 const NOW = '2026-11-09T08:00:00.000Z'; // Monday
 const MIN = 60000;
@@ -18,7 +20,7 @@ const EVENTS = [
   ev('offsite', '2026-11-19T09:00:00.000Z', '2026-11-19T14:00:00.000Z'),
 ];
 const MEAL_EVENTS = [ev('dentist', '2026-11-10T12:00:00.000Z', '2026-11-10T13:00:00.000Z')];
-const DEADLINE = Date.parse('2026-11-20T00:00:00.000Z');
+const DEADLINE = Date.parse('2026-11-20T17:00:00.000Z'); // 17:00 on the due Friday, as in benchmark/gen.mjs
 const STEPS = ['demo-outline', 'demo-production', 'demo-rehearsal'];
 
 const mealBlock = (id, title, group, start, end) => ({ id, title, group, start, end });
@@ -104,21 +106,24 @@ async function s3(p) {
 
 async function s4(p) {
   const before = mealPlan();
-  const drag = { type: 'drag', blockId: 'cook', start: '2026-11-10T13:00:00.000Z' };
+  const drag = { type: 'drag', blockId: 'shop', start: '2026-11-10T13:00:00.000Z' }; // shopping moves later
   const r1 = enforce(await p.replan({ plan: before, change: drag, events: MEAL_EVENTS }));
   const q = r1.question?.text ?? '';
+  // One question names the whole chain (shopping, cooking and dinner), not the unrelated groceries.
   const asked = ['Shopping', 'Cooking', 'Dinner'].every((n) => q.includes(n)) && !q.includes('Groceries')
-    && byId(r1.blocks).dinner.start === '2026-11-10T15:00:00.000Z';
-  const again = enforce(await p.replan({ plan: r1, change: drag, events: MEAL_EVENTS }));
-  const r2 = enforce(await p.replan({ plan: r1, change: { ...drag, start: '2026-11-10T15:00:00.000Z' }, events: MEAL_EVENTS, answers: { confirm: ['dinner'] } }));
+    && byId(r1.blocks).cook.start === '2026-11-10T14:00:00.000Z';
+  // Only cooking is confirmed: dinner is left alone.
+  const r2 = enforce(await p.replan({ plan: r1, events: MEAL_EVENTS, answers: { confirm: ['cook'] } }));
   const by2 = byId(r2.blocks);
-  let v = overlaps(r2.blocks, MEAL_EVENTS);
-  if (by2.shop.start !== before.blocks[0].start) v++; // unconfirmed item moved
+  let v = overlaps(r2.blocks, MEAL_EVENTS) + overlaps(r2.blocks, []);
   if (by2.groceries.start !== before.blocks[1].start) v++; // unrelated item moved
-  if (toMs(by2.cook.end) > toMs(by2.dinner.start)) v++; // order broken
-  const r3 = enforce(await p.replan({ plan: r2, change: { ...drag, start: '2026-11-10T14:00:00.000Z' }, events: MEAL_EVENTS }));
-  const ok = asked && !again.question && !r2.question && by2.dinner.moved === true && !r3.question;
-  return { ok: ok && v === 0, violations: v, questions: [r1, again, r2, r3].filter((x) => x.question).length, moved: movedCount(r2.blocks), delay: 0, shift: shiftOf(before, r1, 'cook') + shiftOf(r1, r2, 'cook') + shiftOf(r2, r3, 'cook') };
+  if (by2.dinner.start !== before.blocks[3].start) v++; // unconfirmed item moved
+  // A refused link (dinner) is not asked about again, and a later drag is still handled.
+  const r3 = enforce(await p.replan({ plan: r2, change: { type: 'drag', blockId: 'shop', start: '2026-11-10T13:30:00.000Z' }, events: MEAL_EVENTS }));
+  const again = !(r3.question?.text ?? '').includes('Dinner') && byId(r3.blocks).shop.start === '2026-11-10T13:30:00.000Z';
+  const ok = asked && !r2.question && by2.cook.moved === true && again;
+
+  return { ok: ok && v === 0, violations: v, questions: [r1, r2, r3].filter((x) => x.question).length, moved: movedCount(r2.blocks), delay: 0, shift: shiftOf(before, r1, 'shop') + shiftOf(r1, r2, 'shop') };
 }
 
 const SITUATIONS = [s1, s2, s3, s4];

@@ -1,6 +1,6 @@
 // Approach 4: LLM-agent planner.
-// The model decides the placement; the planner builds the prompt, calls the activity source as a
-// tool for discovery, and validates the reply. The default export uses the live Gemini model (key
+// The model decides the placement in a tool loop: it may call list_events, free_slots and (for
+// discovery) find_activities, sees each result and iterates until it answers; the planner validates the reply. The default export uses the live Gemini model (key
 // from the environment; without one it returns an empty "model unavailable" result). Tests inject createFakeModel(replies) with
 // replies loaded from tests/fixtures/llm-replies.json, so the recordings never ship with the planner.
 // Contract: default export { plan({request, events, now, context}), replan({plan, change, events, answers}) }
@@ -62,6 +62,58 @@ const fromReply = (text, meta, events) => {
   return result;
 };
 
+const MAX_STEPS = 6;
+
+// Agent tool loop: each turn the model either answers or calls a tool ({ tool, args }). The tool
+// result is appended to the transcript and the model is asked again, up to MAX_STEPS turns. Turn 0
+// uses `key` alone (so a recorded direct answer keeps working); later turns use `key|stepN`.
+async function runLoop({ model, key, task, tools }) {
+  const transcript = [];
+  const toolHelp = Object.entries(tools).map(([name, t]) => ({ name, about: t.about }));
+  for (let step = 0; step < MAX_STEPS; step++) {
+    const text = await model.complete({
+      key: step === 0 ? key : `${key}|step${step}`,
+      prompt: JSON.stringify({ task, tools: toolHelp, transcript, instruction: 'Reply with {"tool","args"} to call a tool, or with the final JSON answer.' }),
+    });
+    let reply;
+    try { reply = JSON.parse(text); } catch { throw new Error('model reply rejected: not JSON'); }
+    if (!reply || typeof reply.tool !== 'string') return { reply, text };
+    const tool = tools[reply.tool];
+    let result;
+    if (!tool) result = { error: `unknown tool ${reply.tool}` };
+    else {
+      try { result = await tool.run(reply.args ?? {}); } catch (err) { result = { error: String(err.message ?? err) }; }
+    }
+    transcript.push({ tool: reply.tool, args: reply.args ?? {}, result });
+  }
+  throw new Error('model reply rejected: tool loop did not finish');
+}
+
+const planTools = (events, now) => ({
+  list_events: { about: 'Returns the fixed calendar events.', run: () => events },
+  free_slots: {
+    about: 'free_slots({from,to,minutes}) returns gaps between fixed events of at least `minutes` inside [from,to].',
+    run: ({ from = now, to, minutes = 30 }) => {
+      const lo = Date.parse(from);
+      const hi = to ? Date.parse(to) : lo + 14 * 864e5;
+      const need = minutes * 6e4;
+      if (Number.isNaN(lo) || Number.isNaN(hi)) throw new Error('bad from/to');
+      const gaps = [];
+      let cursor = lo;
+      for (const ev of [...events].sort((a, b) => Date.parse(a.start) - Date.parse(b.start))) {
+        const s = Date.parse(ev.start);
+        const e = Date.parse(ev.end);
+        if (e <= cursor) continue;
+        if (s >= hi) break;
+        if (s - cursor >= need) gaps.push({ start: new Date(cursor).toISOString(), end: new Date(s).toISOString() });
+        cursor = Math.max(cursor, e);
+      }
+      if (hi - cursor >= need) gaps.push({ start: new Date(cursor).toISOString(), end: new Date(hi).toISOString() });
+      return gaps;
+    },
+  },
+});
+
 export function createAgent({ model = createGeminiModel() } = {}) {
   return {
     async plan({ request, events = [], now, context = {} }) {
@@ -70,10 +122,20 @@ export function createAgent({ model = createGeminiModel() } = {}) {
         if (context.dismissed || !context.interests?.length || !context.city || !context.source) {
           return { blocks: [], notes: ['nothing to suggest'], meta };
         }
-        const found = (await context.source.find({ interests: context.interests, city: context.city })) ?? [];
-        const key = `discover|${found.map((c) => c.id).join(',')}`;
-        const reply = JSON.parse(await model.complete({ key, prompt: JSON.stringify({ request, now, interests: context.interests, found, events }) }));
-        const blocks = (reply.pick ?? []).map((id) => found.find((c) => c.id === id)).filter(Boolean).map((c) => ({
+        const found = [];
+        const tools = {
+          find_activities: {
+            about: 'find_activities({interests,city}) returns candidate activities from the activity source.',
+            run: async ({ interests = context.interests, city = context.city } = {}) => {
+              const list = (await context.source.find({ interests, city })) ?? [];
+              for (const c of list) if (!found.some((f) => f.id === c.id)) found.push(c);
+              return list;
+            },
+          },
+          ...planTools(events, now),
+        };
+        const { reply } = await runLoop({ model, key: `discover|${context.interests.join(',')}|${context.city}`, task: { request, now, interests: context.interests, city: context.city }, tools });
+        const blocks = (reply?.pick ?? []).map((id) => found.find((c) => c.id === id)).filter(Boolean).map((c) => ({
           id: `candidate-${c.id}`, title: c.title, start: c.start, end: c.end, kind: 'candidate',
           tentative: true, place: c.place, reason: c.reason, source: c.source,
         }));
@@ -81,12 +143,12 @@ export function createAgent({ model = createGeminiModel() } = {}) {
         if (blocks.length && reply.question) result.question = { text: reply.question, items: blocks.map((b) => b.id) };
         return result;
       }
-      const text = await model.complete({ key: `plan|${request}`, prompt: JSON.stringify({ request, now, events }) });
+      const { text } = await runLoop({ model, key: `plan|${request}`, task: { request, now }, tools: planTools(events, now) });
       return fromReply(text, { kind: 'plan', now: toIso(now) }, events);
     },
     async replan({ plan: prev, change, events = [], answers }) {
       const key = `replan|${JSON.stringify(change ?? null)}|${JSON.stringify(answers ?? null)}|${prev.question ? 'asked' : 'fresh'}`;
-      const text = await model.complete({ key, prompt: JSON.stringify({ plan: prev.blocks, change, answers, events }) });
+      const { text } = await runLoop({ model, key, task: { plan: prev.blocks, change, answers }, tools: planTools(events, prev.meta?.now ?? new Date().toISOString()) });
       return fromReply(text, prev.meta ?? { kind: 'plan' }, events);
     },
   };
