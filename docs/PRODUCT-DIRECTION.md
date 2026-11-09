@@ -36,31 +36,21 @@ The first build is a local, English-only, offline-testable prototype. Real Googl
 
 ## Where the build stands
 
-The shared benchmark in `benchmark/` is the owner's: it generates cases for the four situations, checks every plan with named rules (commonsense and hard) and reports pass rates with intervals. The finish line is: the roundtable accepts the benchmark (P2), the best approach is chosen on it and every seat agrees (P3), and an offline demo of the four situations exists (P4).
+The four situations run end to end in an offline demo (`npm start`, then `/demo`): a week Preview Calendar where proposed blocks are dashed, fixed events are locked and consequential moves are marked. Nothing is written to Google Calendar. The planner is `hybrid-live`: a model only reads the request into a small intent, and `src/planner/core.mjs` plans, asks one merged question, remembers refusals and checks the rules. The choice and its numbers are in `docs/approach-decision.md`; the benchmark that produced them is in `benchmark/`.
 
 ## Model and tools
 
 The Calendar Agent calls Gemini 3.8 Flash (`gemini-3.8-flash`) through the Gemini API. The model id is read from `GEMINI_MODEL` and defaults to `gemini-3.8-flash`; the key comes from the environment (`GEMINI_API_KEY`) and is never committed or printed. Offline tests use recorded or fake model replies and must pass without a key.
 
-## Work queue
+## What was built
 
-Take items in order. Coding seats are Claude, AdaL and Kylon's Claude agent; reviewing seats check the items named for them.
+| Part | Where |
+| --- | --- |
+| Four approaches behind one interface (rules, constraint search, Agent tool loop, hybrid) | `src/planner/approaches/` |
+| Shared benchmark with public and private-wording cases | `benchmark/`, review in `docs/benchmark-review.md` |
+| Choice of the best approach with numbers | `docs/approach-decision.md` |
+| Visual demo | `public/demo.html`, `public/demo.js`, `src/demo-api.mjs`, `server.mjs` |
 
-| # | Goal | Acceptance | Who |
-| --- | --- | --- | --- |
-| P1 | Four approaches | Build the same small planner four ways behind one interface in `src/planner/` (rules, constraint search, Agent tool loop, hybrid). Each exports `plan` and `replan` as defined in `benchmark/contract.mjs` and runs on the shared benchmark (`node benchmark/run.mjs`, public split). Tests in `tests/`. The code must not contain votes cast for other seats | Coding seats, one approach each; every seat votes on the build |
-| P2 | Review the benchmark | Every seat reads `benchmark/` (generator, checks, runner, report and its README) and votes on whether it measures the four situations fairly. Findings list the changes wanted: missing cases, unfair or wrong checks, wrong expectations. `docs/benchmark-review.md` has one section per seat's verdict and the changes the roundtable agrees on. `benchmark/` is read-only for seats; the owner's agent applies the agreed changes | Coding seats write the record; every seat votes |
-| P3 | Choose the best approach | The owner's agent runs the benchmark (private held-out wording, real Gemini model) on every approach and notes the numbers. `docs/approach-decision.md` names the best approach with the numbers, the gain over the baselines (one-shot model answer, plain code parser) and the reasons, and lists what is not proven. The record contains no votes and no vote placeholders: the seats' vote on the choice is the roundtable's approval vote on this build, shown in the round report | Coding seats write the record from the owner's numbers |
-| P4 | Four-situation demo | From the chosen approach, a demo page (`public/demo.html` served at `/demo` by `node src/demo-server.mjs`; the owner mounts the same handler in `server.mjs` when merging, so seats do not edit or test `server.mjs`) shows all four situations end to end in a week Preview Calendar: basic arrangement, deadline back-planning with dragging, proactive activity discovery, and related-item adjustment with its single question. No real Google Calendar and no app; the model is live when the key is in the environment and recorded replies otherwise. Tests prove each situation runs | Coding seats |
-| P9 | Continuous roundtable | One unattended run completes P1 to P4 | Claude coordinator |
+## Later
 
-Later, each needing its own decision: real Google Calendar writes, cross-device sync, public deployment.
-
-## How the roundtable keeps working
-
-- Every round carries one goal from the work queue, not only fixes for rejections.
-- After a promotion, the next round starts from the queue. The previous build keeps running on the private local port until a new one passes.
-- The release rules (kept outside this repo) are unchanged: at least 7 of 8 approvals, private loopback only, at most 2 hours per round, at most 3 revisions. If an item still fails, record why and move to the next item.
-- Non-coding seats review proposals, re-check the promoted build, add tests and update the Prelint ledger.
-- No check may need a real person; a part of an item that does, is the owner's own check.
-- Stop when P4 is promoted, the time or round limit is reached, or the owner says stop. Then shut down the n8n checks and the cloud machines so nothing bills idly.
+Each needs its own decision: real Google Calendar writes, cross-device sync, public deployment, a wider parser for due-date wordings, and a trial with real people.
