@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import approach from '../src/planner/approaches/hybrid.mjs';
+import * as approach from '../src/planner/approaches/hybrid.mjs';
 
 const NOW = '2026-11-09T08:00:00.000Z'; // Monday
 const ev = (id, start, end) => ({ id, title: id, start, end });

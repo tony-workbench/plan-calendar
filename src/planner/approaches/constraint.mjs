@@ -3,6 +3,7 @@
 // back-scheduled from the deadline), keeps ordering constraints and re-plans with minimal moves.
 // Contract: default export { plan({request, events, now, context}), replan({plan, change, events, answers}) }.
 
+import { adapt } from './adapt.mjs';
 import {
   DAY, MIN, ms, iso, normalize, freeSlots, firstFit, lastFit, hits,
   parseDuration, weekdayDate, startOfDay, roundUp,
@@ -188,4 +189,4 @@ export function replan(input) {
   return replanCore(input);
 }
 
-export default { plan, replan };
+export default adapt({ plan, replan });

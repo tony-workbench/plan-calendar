@@ -4,6 +4,7 @@
 // Contract: default export { plan({request, events, now, context}), replan({plan, change, events, answers}) }.
 
 import { planWith, replanCore, parseRequest } from './constraint.mjs';
+import { adapt } from './adapt.mjs';
 import { DAY, HOUR, startOfDay } from './slots.mjs';
 
 export { parseRequest };
@@ -53,4 +54,4 @@ export function replan(input) {
   return replanCore(input, { inferHints: true });
 }
 
-export default { plan, replan };
+export default adapt({ plan, replan });

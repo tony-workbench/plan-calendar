@@ -1,95 +1,77 @@
-// Shared slot and interval helpers for the constraint and hybrid planners.
-// All times are handled as epoch milliseconds in UTC; callers pass ISO strings or numbers.
+// Time helpers shared by the constraint and hybrid planners. All times are UTC milliseconds;
+// planning happens inside a daily window of 08:00-18:00 UTC.
 
-export const MIN = 60000;
-export const HOUR = 60 * MIN;
-export const DAY = 24 * HOUR;
+import { MIN, HOUR, DAY, toMs, toIso } from '../interface.mjs';
 
-export const ms = (v) => (typeof v === 'number' ? v : Date.parse(v));
-export const iso = (n) => new Date(n).toISOString();
-export const startOfDay = (t) => Math.floor(t / DAY) * DAY;
+export { MIN, HOUR, DAY };
+export const ms = toMs;
+export const iso = toIso;
+
+const WINDOW_START = 8 * HOUR;
+const WINDOW_END = 18 * HOUR;
+
+export const startOfDay = (t) => Math.floor(ms(t) / DAY) * DAY;
 export const roundUp = (t, step = 15 * MIN) => Math.ceil(t / step) * step;
 
-export const overlaps = (a, b) => a.start < b.end && b.start < a.end;
+export const normalize = (events = []) =>
+  events.map((e) => ({ start: ms(e.start), end: ms(e.end) })).sort((a, b) => a.start - b.start);
 
-export function normalize(list = []) {
-  return list
-    .filter((e) => e && e.start != null && e.end != null)
-    .map((e) => ({ ...e, start: ms(e.start), end: ms(e.end) }));
-}
+export const hits = (busy, b) => busy.some((x) => ms(b.start) < ms(x.end) && ms(b.end) > ms(x.start));
 
-export function mergeIntervals(list) {
-  const sorted = list.map((i) => ({ start: i.start, end: i.end })).sort((a, b) => a.start - b.start);
-  const out = [];
-  for (const i of sorted) {
-    const last = out[out.length - 1];
-    if (last && i.start <= last.end) last.end = Math.max(last.end, i.end);
-    else out.push(i);
-  }
-  return out;
-}
-
-// Free intervals inside working hours (UTC) between from and to, minus busy intervals.
-export function freeSlots(busy, from, to, { dayStart = 9, dayEnd = 18 } = {}) {
-  const merged = mergeIntervals(busy);
-  const out = [];
-  for (let d = startOfDay(from); d < to; d += DAY) {
-    const lo = Math.max(d + dayStart * HOUR, from);
-    const hi = Math.min(d + dayEnd * HOUR, to);
-    if (lo >= hi) continue;
-    let cur = lo;
-    for (const b of merged) {
-      if (b.end <= cur) continue;
-      if (b.start >= hi) break;
-      if (b.start > cur) out.push({ start: cur, end: b.start });
+// Free intervals inside the daily window between from and to, minus the busy intervals.
+export function freeSlots(busy, from, to) {
+  const taken = normalize(busy);
+  const slots = [];
+  for (let day = startOfDay(from); day < to; day += DAY) {
+    let cur = Math.max(day + WINDOW_START, from);
+    const end = Math.min(day + WINDOW_END, to);
+    for (const b of taken) {
+      if (b.end <= cur || b.start >= end) continue;
+      if (b.start > cur) slots.push({ start: cur, end: b.start });
       cur = Math.max(cur, b.end);
-      if (cur >= hi) break;
     }
-    if (cur < hi) out.push({ start: cur, end: hi });
+    if (end > cur) slots.push({ start: cur, end });
   }
-  return out;
+  return slots;
 }
 
-// Earliest start >= notBefore where a block of dur fits, or null.
-export function firstFit(slots, dur, notBefore = -Infinity) {
+// Earliest start >= bound that fits dur, or null.
+export function firstFit(slots, dur, bound = -Infinity) {
   for (const s of slots) {
-    const st = Math.max(s.start, notBefore);
-    if (st + dur <= s.end) return st;
+    const st = Math.max(s.start, bound);
+    if (s.end - st >= dur) return st;
   }
   return null;
 }
 
-// Latest start such that the block ends <= notAfter, or null.
-export function lastFit(slots, dur, notAfter = Infinity) {
+// Start of the latest block of dur that ends at or before bound, or null.
+export function lastFit(slots, dur, bound = Infinity) {
   for (let i = slots.length - 1; i >= 0; i--) {
-    const en = Math.min(slots[i].end, notAfter);
-    if (en - dur >= slots[i].start) return en - dur;
+    const end = Math.min(slots[i].end, bound);
+    if (end - slots[i].start >= dur) return end - dur;
   }
   return null;
 }
 
-export function hits(busy, iv) {
-  return busy.some((b) => overlaps(b, iv));
-}
-
+// "half an hour", "90 minutes", "2 hours", "1.5h" -> minutes.
 export function parseDuration(text, fallback = 60) {
-  const t = String(text || '').toLowerCase();
-  if (/half an hour|half hour/.test(t)) return 30;
-  let m = t.match(/(\d+(?:\.\d+)?)\s*(?:hours?|hrs?|h)\b/);
-  if (m) return Math.round(parseFloat(m[1]) * 60);
-  m = t.match(/(\d+)\s*(?:minutes?|mins?|m)\b/);
+  const s = String(text || '').toLowerCase();
+  if (/half an? hour/.test(s)) return 30;
+  if (/an hour and a half/.test(s)) return 90;
+  const h = s.match(/(\d+(?:\.\d+)?)\s*(?:hours?|hrs?|h)\b/);
+  if (h) return Math.round(parseFloat(h[1]) * 60);
+  const m = s.match(/(\d+)\s*(?:minutes?|mins?|m)\b/);
   if (m) return parseInt(m[1], 10);
-  if (/\b(an|one) hour\b/.test(t)) return 60;
+  if (/\b(an|one)\s+(?:extra\s+)?hour\b/.test(s)) return 60;
   return fallback;
 }
 
-const DAYS = ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday'];
+const NAMES = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'];
 
-// Start (00:00 UTC) of the named weekday. "next X" is X in the following calendar week (Mon-Sun).
-export function weekdayDate(name, nowMs, next) {
-  const t = DAYS.indexOf(name.toLowerCase());
-  if (t < 0) return null;
-  const idx = (new Date(nowMs).getUTCDay() + 6) % 7;
-  const ahead = next ? 7 - idx + t : (t - idx + 7) % 7 || 7;
-  return startOfDay(nowMs) + ahead * DAY;
+// Start of the next given weekday after now; `next` pushes it a further week.
+export function weekdayDate(name, nowMs, next = false) {
+  const today = startOfDay(nowMs);
+  const target = NAMES.indexOf(String(name).toLowerCase());
+  const ahead = ((target - new Date(today).getUTCDay() + 6) % 7) + 1;
+  return today + (ahead + (next ? 7 : 0)) * DAY;
 }
