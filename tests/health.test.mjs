@@ -14,7 +14,7 @@ test('the server answers /health', async () => {
         await new Promise((r) => setTimeout(r, 100));
       }
     }
-    assert.deepEqual(body, { ok: true });
+    assert.deepEqual(body, { ok: true, writesEnabled: false, configured: false });
   } finally {
     child.kill();
   }
