@@ -3,10 +3,250 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Plan Calendar</title>
+<title>Plan Calendar - Preview</title>
+<style>
+  :root { --ink:#1f2937; --muted:#6b7280; --line:#e5e7eb; --fixed:#374151; --prop:#2563eb; }
+  * { box-sizing: border-box; }
+  body { margin:0; font:14px/1.4 system-ui, sans-serif; color:var(--ink); background:#f9fafb; }
+  header { display:flex; flex-wrap:wrap; gap:8px; align-items:center; padding:12px 16px; background:#fff; border-bottom:1px solid var(--line); }
+  h1 { font-size:16px; margin:0 12px 0 0; }
+  button { font:inherit; padding:6px 12px; border:1px solid var(--line); background:#fff; border-radius:6px; cursor:pointer; }
+  button[aria-pressed="true"] { background:var(--ink); color:#fff; }
+  button:disabled { opacity:.45; cursor:not-allowed; }
+  #range { min-width:200px; font-weight:600; }
+  .spacer { flex:1; }
+  #legend { padding:8px 16px; color:var(--muted); font-size:12px; }
+  #cal { display:flex; margin:0 16px 16px; background:#fff; border:1px solid var(--line); border-radius:8px; overflow:hidden; user-select:none; }
+  .gutter { width:48px; flex:none; }
+  .gutter div { height:48px; font-size:11px; color:var(--muted); text-align:right; padding-right:6px; }
+  .gutter .head, .col .head { height:32px; border-bottom:1px solid var(--line); text-align:center; font-weight:600; padding-top:6px; }
+  .col { flex:1; min-width:0; border-left:1px solid var(--line); position:relative; }
+  .col .body { position:relative; height:672px; background:repeating-linear-gradient(to bottom, transparent 0, transparent 47px, var(--line) 47px, var(--line) 48px); }
+  .block { position:absolute; border-radius:4px; padding:2px 4px; font-size:12px; overflow:hidden; }
+  .block[data-kind="fixed"] { background:var(--fixed); color:#fff; border:1px solid var(--fixed); cursor:not-allowed; }
+  .block[data-kind="proposed"] { background:#dbeafe; color:#1e3a8a; border:2px dashed var(--prop); cursor:grab; touch-action:none; }
+  .block.dragging { opacity:.8; cursor:grabbing; z-index:5; }
+  .tag { display:inline-block; font-size:10px; margin-left:4px; padding:0 4px; border-radius:3px; background:rgba(255,255,255,.25); }
+  .block[data-kind="proposed"] .tag { background:#fff; color:var(--prop); }
+</style>
 </head>
 <body>
-<h1>Plan Calendar</h1>
-<p>The Preview Calendar will appear here.</p>
+<header>
+  <h1>Preview Calendar</h1>
+  <button id="btn-day" type="button" aria-pressed="false">Day</button>
+  <button id="btn-week" type="button" aria-pressed="true">Week</button>
+  <button id="btn-prev" type="button" aria-label="Previous">&larr; Prev</button>
+  <button id="btn-next" type="button" aria-label="Next">Next &rarr;</button>
+  <span id="range"></span>
+  <span class="spacer"></span>
+  <button id="btn-undo" type="button" disabled>Undo</button>
+</header>
+<div id="legend">Solid locked blocks are existing events. Dashed blocks are proposed and can be dragged. Nothing is saved to Google Calendar.</div>
+<div id="cal"></div>
+<script>
+(function () {
+  var DAY = 86400000, MIN = 60000, SNAP = 15, START_H = 7, END_H = 21, PX_H = 48;
+  var DAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+
+  function at(day, hh, mm) { return new Date(Date.UTC(2026, 10, 9 + day, hh, mm || 0)).toISOString(); }
+  // Demo week: Monday 2026-11-09 (UTC, shown as-is).
+  function demo() {
+    return [
+      { id: 'f1', kind: 'fixed', title: 'Team standup', start: at(0, 9), end: at(0, 9, 30) },
+      { id: 'f2', kind: 'fixed', title: 'Dentist', start: at(1, 14), end: at(1, 15) },
+      { id: 'f3', kind: 'fixed', title: 'Project review', start: at(2, 10), end: at(2, 11, 30) },
+      { id: 'f4', kind: 'fixed', title: 'Team standup', start: at(3, 9), end: at(3, 9, 30) },
+      { id: 'f5', kind: 'fixed', title: 'Lunch with Sam', start: at(4, 12), end: at(4, 13) },
+      { id: 'p1', kind: 'proposed', title: 'Workout', start: at(0, 18), end: at(0, 18, 30) },
+      { id: 'p2', kind: 'proposed', title: 'Demo outline', start: at(1, 10), end: at(1, 11, 30) },
+      { id: 'p3', kind: 'proposed', title: 'Demo production', start: at(2, 10, 30), end: at(2, 12) },
+      { id: 'p4', kind: 'proposed', title: 'Demo rehearsal', start: at(3, 15), end: at(3, 16) }
+    ];
+  }
+
+  var state = { view: 'week', anchor: at(0, 0), events: demo() };
+  var history = [];
+
+  function clone(list) { return list.map(function (e) { return Object.assign({}, e); }); }
+  function startOfDay(iso) { var d = new Date(iso); return Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate()); }
+  function mondayOf(ms) { var dow = (new Date(ms).getUTCDay() + 6) % 7; return ms - dow * DAY; }
+  function snap(ms) { var s = SNAP * MIN; return Math.round(ms / s) * s; }
+  var ENT = { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' };
+  function esc(v) { return String(v).replace(/[&<>"']/g, function (c) { return ENT[c]; }); }
+  // Keep a block on a visible day and inside the visible hours.
+  function clampStart(ms, dur) {
+    var days = visibleDays();
+    var own = startOfDay(new Date(ms).toISOString());
+    var day = Math.min(Math.max(own, days[0]), days[days.length - 1]);
+    var lo = day + START_H * 60 * MIN;
+    var hi = Math.max(lo, day + END_H * 60 * MIN - dur);
+    return Math.min(Math.max(ms - own + day, lo), hi);
+  }
+
+  // Mirrors src/calendar/layout.mjs: overlapping blocks share side-by-side columns.
+  function layoutDay(items) {
+    var sorted = items.slice().sort(function (a, b) { return Date.parse(a.start) - Date.parse(b.start) || Date.parse(b.end) - Date.parse(a.end); });
+    var out = [], cluster = [], clusterEnd = -Infinity;
+    function flush() {
+      var cols = cluster.reduce(function (m, c) { return Math.max(m, c.col + 1); }, 0);
+      cluster.forEach(function (c) { c.cols = cols; out.push(c); });
+      cluster = []; clusterEnd = -Infinity;
+    }
+    var ends = [];
+    sorted.forEach(function (e) {
+      var s = Date.parse(e.start), en = Date.parse(e.end);
+      if (cluster.length && s >= clusterEnd) { flush(); ends = []; }
+      var col = 0;
+      while (ends[col] !== undefined && ends[col] > s) col++;
+      ends[col] = en;
+      cluster.push({ event: e, col: col });
+      clusterEnd = Math.max(clusterEnd, en);
+    });
+    if (cluster.length) flush();
+    return out;
+  }
+
+  function getState() {
+    return { view: state.view, anchor: state.anchor, events: clone(state.events), canUndo: history.length > 0 };
+  }
+
+  // Mirrors src/calendar/store.mjs: fixed cannot move, one history entry per change.
+  function moveBlock(id, startIso) {
+    var ev = state.events.filter(function (e) { return e.id === id; })[0];
+    if (!ev || ev.kind !== 'proposed') return false;
+    var t = Date.parse(startIso);
+    if (isNaN(t)) return false;
+    var dur = Date.parse(ev.end) - Date.parse(ev.start);
+    var start = clampStart(snap(t), dur);
+    if (start === Date.parse(ev.start)) return false;
+    history.push(clone(state.events));
+    ev.start = new Date(start).toISOString();
+    ev.end = new Date(start + dur).toISOString();
+    render();
+    return true;
+  }
+
+  function undo() {
+    if (!history.length) return false;
+    state.events = history.pop();
+    render();
+    return true;
+  }
+
+  function setView(view) {
+    if (view !== 'day' && view !== 'week') return false;
+    state.view = view;
+    render();
+    return true;
+  }
+
+  function shift(dir) {
+    var a = Date.parse(state.anchor);
+    state.anchor = new Date(a + dir * (state.view === 'week' ? 7 : 1) * DAY).toISOString();
+    render();
+  }
+
+  function visibleDays() {
+    var a = startOfDay(state.anchor);
+    if (state.view === 'day') return [a];
+    var m = mondayOf(a), r = [];
+    for (var i = 0; i < 7; i++) r.push(m + i * DAY);
+    return r;
+  }
+
+  function pad(n) { return (n < 10 ? '0' : '') + n; }
+  function hhmm(iso) { var d = new Date(iso); return pad(d.getUTCHours()) + ':' + pad(d.getUTCMinutes()); }
+  function dayLabel(ms) { var d = new Date(ms); return DAYS[(d.getUTCDay() + 6) % 7] + ' ' + (d.getUTCMonth() + 1) + '/' + d.getUTCDate(); }
+
+  var drag = null;
+
+  function render() {
+    if (typeof document === 'undefined') return;
+    var cal = document.getElementById('cal');
+    if (!cal) return;
+    var days = visibleDays();
+    var html = '<div class="gutter"><div class="head"></div>';
+    for (var h = START_H; h < END_H; h++) html += '<div>' + pad(h) + ':00</div>';
+    html += '</div>';
+    days.forEach(function (d, i) {
+      html += '<div class="col" data-day="' + i + '"><div class="head">' + dayLabel(d) + '</div><div class="body">';
+      var items = state.events.filter(function (e) { return startOfDay(e.start) === d; });
+      layoutDay(items).forEach(function (l) {
+        var e = l.event;
+        var top = (Date.parse(e.start) - d) / MIN / 60 - START_H;
+        var hgt = (Date.parse(e.end) - Date.parse(e.start)) / MIN / 60;
+        var w = 100 / l.cols;
+        var label = e.kind === 'fixed' ? 'Locked' : 'Proposed';
+        html += '<div class="block" data-kind="' + esc(e.kind) + '" data-id="' + esc(e.id) + '" style="top:' + (top * PX_H) + 'px;height:' + Math.max(hgt * PX_H, 16) +
+          'px;left:' + (l.col * w) + '%;width:calc(' + w + '% - 2px)"><strong>' + esc(e.title) + '</strong><span class="tag">' + label + '</span><br>' +
+          hhmm(e.start) + '-' + hhmm(e.end) + '</div>';
+      });
+      html += '</div></div>';
+    });
+    cal.innerHTML = html;
+    document.getElementById('range').textContent = days.length === 1 ? dayLabel(days[0]) : dayLabel(days[0]) + ' - ' + dayLabel(days[6]);
+    document.getElementById('btn-undo').disabled = history.length === 0;
+    document.getElementById('btn-day').setAttribute('aria-pressed', String(state.view === 'day'));
+    document.getElementById('btn-week').setAttribute('aria-pressed', String(state.view === 'week'));
+  }
+
+  function onDown(ev) {
+    var el = ev.target.closest && ev.target.closest('.block[data-kind="proposed"]');
+    if (!el) return;
+    var id = el.getAttribute('data-id');
+    var e = state.events.filter(function (x) { return x.id === id; })[0];
+    var cols = document.querySelectorAll('.col .body');
+    if (!e || !cols.length) return;
+    var rect = cols[0].getBoundingClientRect();
+    var colW = cols[0].getBoundingClientRect().width;
+    drag = { id: id, el: el, x: ev.clientX, y: ev.clientY, colW: colW, ev: e, left0: rect.left };
+    el.classList.add('dragging');
+    if (el.setPointerCapture) try { el.setPointerCapture(ev.pointerId); } catch (x) {}
+    ev.preventDefault();
+  }
+
+  function target(ev) {
+    var dy = ev.clientY - drag.y, dx = ev.clientX - drag.x;
+    var mins = Math.round(dy / PX_H * 60 / SNAP) * SNAP;
+    var days = state.view === 'week' ? Math.round(dx / drag.colW) : 0;
+    return { mins: mins, days: days };
+  }
+
+  function onMove(ev) {
+    if (!drag) return;
+    var t = target(ev); // the preview snaps to the same 15-minute grid as the drop
+    drag.el.style.transform = 'translate(' + (t.days * drag.colW) + 'px,' + (t.mins / 60 * PX_H) + 'px)';
+  }
+
+  function onUp(ev) {
+    if (!drag) return;
+    var t = target(ev), d = drag;
+    drag = null;
+    d.el.classList.remove('dragging');
+    d.el.style.transform = '';
+    if (t.mins || t.days) {
+      // Vertical drag stays on the block's day (clamped to the visible hours); horizontal drag picks the day.
+      var s0 = Date.parse(d.ev.start), dur = Date.parse(d.ev.end) - s0, day0 = startOfDay(d.ev.start);
+      var lo = START_H * 60, hi = Math.max(lo, END_H * 60 - dur / MIN);
+      var m = Math.min(Math.max((s0 - day0) / MIN + t.mins, lo), hi);
+      moveBlock(d.id, new Date(day0 + t.days * DAY + m * MIN).toISOString());
+    }
+  }
+
+  window.previewCalendar = { getState: getState, moveBlock: moveBlock, undo: undo, setView: setView };
+
+  if (typeof document !== 'undefined' && document.getElementById) {
+    document.getElementById('btn-day').addEventListener('click', function () { setView('day'); });
+    document.getElementById('btn-week').addEventListener('click', function () { setView('week'); });
+    document.getElementById('btn-prev').addEventListener('click', function () { shift(-1); });
+    document.getElementById('btn-next').addEventListener('click', function () { shift(1); });
+    document.getElementById('btn-undo').addEventListener('click', function () { undo(); });
+    document.getElementById('cal').addEventListener('pointerdown', onDown);
+    document.addEventListener('pointermove', onMove);
+    document.addEventListener('pointerup', onUp);
+    render();
+  }
+})();
+</script>
 </body>
 </html>
