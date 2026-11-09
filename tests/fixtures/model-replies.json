@@ -1,8 +1,0 @@
-{
-  "find time to work out for half an hour": { "kind": "basic", "title": "Work out", "minutes": 30 },
-  "the demo is due next friday, help me plan the prep": { "kind": "deadline", "what": "Demo", "deadlineText": "next Friday" },
-  "anything fun this week": { "kind": "discover" },
-  "production needs an hour more": { "kind": "more-time", "target": "production", "minutes": 60 },
-  "it is due thursday at 3 pm": { "kind": "set-deadline", "deadlineText": "Thursday at 3 pm" },
-  "what is the capital of france": { "kind": "none" }
-}
