@@ -167,3 +167,21 @@ test('the record carries its own evidence and says the changes are only proposed
   assert.match(m[1], /seven of eight/i);
   assert.ok(doc.indexOf('## Review evidence') < doc.indexOf('## Proposed changes'));
 });
+
+test('regression: the summary lists every seat verdict and the changes wanted', () => {
+  const m = doc.match(/^## Summary of seat verdicts and changes\n([\s\S]*?)(?=^## )/m);
+  assert.ok(m, 'summary section');
+  for (const seat of ['Kylon', 'Claude']) assert.match(m[1], new RegExp(`^\\| ${seat} \\| fair with changes \\|`, 'm'));
+  for (const seat of ['AdaL', 'Prelint', 'AskTheW', 'Masky', 'n8n', 'Celesto']) assert.ok(m[1].includes(seat), `summary names ${seat}`);
+  assert.match(m[1], /not recorded/);
+  assert.match(m[1], /changes 9 to 12/);
+  assert.match(m[1], /not agreed by the roundtable/);
+});
+
+test('regression: open review points have a recorded disposition and no go decision is claimed', () => {
+  const m = doc.match(/^## Dispositions of review points not covered by a seat verdict\n([\s\S]*?)(?=^## )/m);
+  assert.ok(m, 'dispositions section');
+  for (const re of [/check 16[^\n]*missing/, /Time zone[^\n]*C4/, /Ask-bar correction/, /Three generic deadline steps[^\n]*C5/, /private result[^\n]*Gemini/i, /consent/i]) assert.match(m[1], re);
+  assert.doesNotMatch(doc, /go decision (is|was) recorded|Verdict: go\b/i);
+  assert.ok(doc.indexOf('## Dispositions') < doc.indexOf('## Review evidence'));
+});
