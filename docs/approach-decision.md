@@ -1,8 +1,10 @@
 # Approach decision (P3)
 
-Record of the owner's benchmark run and the choice of approach. The numbers are the owner's; the coding seats copied them and did not rerun them. The seats' vote on this choice is the roundtable approval vote on this build, shown in the round report.
+Record of the owner's benchmark run and the choice of approach. The numbers are the owner's; the coding seats copied them and did not rerun them.
 
 ## Decision
+
+The choice is voted by all eight seats in the roundtable round that promotes this record.
 
 Best approach: **hybrid-live**. The real model understands the request, `src/planner/core.mjs` plans, asks one merged question, remembers refusals and checks the rules. It passed 233 of 240 private-wording cases (97 percent).
 
@@ -27,7 +29,7 @@ Public wording, from the committed run in `results/` (200 cases per approach, 50
 
 search shares `core.mjs` with rules. The gemini one-shot related cases moved unrelated items in 27 percent of cases. agent-live took about 37 seconds per case.
 
-With the public wording the offline approaches score 99 to 100 percent, so the public set no longer separates them; the private wording does.
+With the public wording the offline approaches score 100 percent, so the public set no longer separates them; the private wording does.
 
 ## Reasons
 

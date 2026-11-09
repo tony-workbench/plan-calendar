@@ -17,7 +17,13 @@ test('the record has no votes section and no vote placeholders', () => {
   assert.doesNotMatch(doc, /^## Votes/m);
   assert.doesNotMatch(doc, /not recorded/);
   assert.match(doc, /^## Decision$/m);
-  assert.match(doc, /roundtable approval vote/);
+  assert.doesNotMatch(doc, /only a seat|seats' vote|approval vote/);
+  const decision = doc.split(/^## Decision$/m)[1].split(/^## /m)[0];
+  assert.match(decision, /The choice is voted by all eight seats in the roundtable round that promotes this record\./);
+});
+
+test('public-wording rate is stated the same way everywhere', () => {
+  assert.doesNotMatch(doc, /99 to 100 percent/);
 });
 
 test('scorecard rates and intervals match the owner counts', () => {
