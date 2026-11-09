@@ -293,19 +293,16 @@ export function replanRelated(plan, change, events, answers) {
       out.set(id, { ...b, start: iso(s), end: iso(s + length), moved: true });
       prevEnd = s + length;
     }
-    const refused = pend.items.filter((id) => !ok.includes(id));
-    const meta = { ...plan.meta, pending: undefined, answered: [...new Set([...(plan.meta?.answered ?? []), pend.blockId, ...ok])] };
-    if (refused.length) meta.declined = [...new Set([...declined, ...refused])];
-    return { blocks: blocks.map((b) => out.get(b.id)), notes: [], meta };
+    const left = pend.items.filter((id) => !ok.includes(id));
+    return { blocks: blocks.map((b) => out.get(b.id)), notes: [], meta: { ...plan.meta, pending: undefined, ...(left.length ? { declined: [...new Set([...declined, ...left])] } : {}) } };
   }
   const me = change.type === 'drag' ? find(change.blockId) : null;
   if (!me) return { ...base, notes: ['That item is not part of this plan.'], meta: plan.meta };
   const moved = blocks.map((b) => b.id === me.id ? { ...b, start: change.start, end: iso(ms(change.start) + dur(b)) } : b);
   const chain = followers(blocks, me.id);
   if (chain.length) return { blocks: cascade(moved, [me.id, ...chain], { events, meals: false }).blocks, notes: [], meta: { ...plan.meta, pending: undefined } };
-  const asked = [...declined, ...(plan.meta?.answered ?? [])];
-  const group = me.group && !asked.includes(me.id) ? blocks.filter((b) => b.group === me.group && b.id !== me.id && !asked.includes(b.id)) : [];
-  if (!group.length) return { blocks: moved, notes: [], meta: { ...plan.meta, pending: undefined } };
+  const group = me.group ? blocks.filter((b) => b.group === me.group && b.id !== me.id) : [];
+  if (!group.length || group.every((b) => declined.includes(b.id))) return { blocks: moved, notes: [], meta: { ...plan.meta, pending: undefined } };
   const items = [me.id, ...group.map((b) => b.id)].sort((a, b) => ms(find(a).start) - ms(find(b).start));
   const text = `${join(items.map((id) => find(id).title))} may be part of the same plan. Adjust them together?`;
   const pending = { blockId: me.id, delta: ms(change.start) - ms(me.start), items: items.filter((id) => id !== me.id) };

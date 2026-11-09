@@ -13,15 +13,6 @@ async function pick(run, input) {
   return { ...second, meta: { ...second.meta, debug: { used: 'search', violations: bad } } };
 }
 
-<<<<<<< newer
 export const plan = (input) => pick((p) => p.plan(input), input);
 export const replan = (input) => pick((p) => p.replan(input), input);
-=======
-// With GEMINI_API_KEY set, the registered hybrid sends the request text to Gemini (one call per request), so
-// `node benchmark/run.mjs --approach hybrid` scores the model path. It stays offline without a key, under node --test, or with HYBRID_OFFLINE=1.
-export const modelEnabled = (env) => Boolean(env.GEMINI_API_KEY) && !env.NODE_TEST_CONTEXT && !env.HYBRID_OFFLINE;
-export const registeredOptions = (env = process.env) => (modelEnabled(env) ? { env } : undefined);
-const registered = createHybrid(registeredOptions());
-export const plan = registered.plan, replan = registered.replan;
->>>>>>> draft
 export default { plan, replan };
